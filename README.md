@@ -32,7 +32,10 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
   外部CDNには一切依存しない自前CSS・自前SVGチャート（`css/app.css`, `js/ui/simpleChart.js`。
   Chart.jsは使わない）。jsdom（開発時のみ）でフォーム送信・削除ボタン・アーカイブ・
   FIFO実現差額の表示・グラフ描画・バリデーションエラー表示までDOM上で検証済み
-- ⬜ Service Worker・manifest.json（オフライン対応・ホーム画面追加）：未着手
+- ✅ Service Worker・manifest.json（オフライン対応・ホーム画面追加）：`sw.js`はキャッシュ一覧を
+  手書きで維持しなくて済むよう stale-while-revalidate 方式（キャッシュがあれば即返しつつ裏で
+  更新、初回だけオンライン必須）。`manifest.json`＋iOS用のApple独自metaタグ（apple-touch-icon等）
+  も追加。アイコンはPillow等を使わず標準ライブラリzlibだけで生成（`scripts/generate_icons.py`）
 - ⬜ Flask版DBからのデータ移行スクリプト：未着手
 - ⬜ PC↔PWA間の手動エクスポート/インポート機能：未着手
 

@@ -100,3 +100,12 @@ addRoute("/reports", async (container) => {
 
 const appContainer = document.getElementById("app");
 startRouter(appContainer);
+
+// オフラインで動くようにするためのService Worker登録（対応ブラウザのみ、失敗しても致命的ではない）。
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((err) => {
+      console.warn("Service Worker registration failed:", err);
+    });
+  });
+}
