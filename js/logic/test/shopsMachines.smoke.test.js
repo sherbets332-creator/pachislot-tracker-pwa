@@ -88,6 +88,23 @@ await test("機種一覧: アーカイブ後は一覧から消え、archived=1�
   assert.match(container.textContent, /テスト機種/);
 });
 
+await test("機種一覧: まとめて登録で複数行を一括登録でき、空行・重複はスキップされる", async (db, container) => {
+  await createMachine(db, { name: "既存機種" });
+
+  await renderMachinesList(container, db, new URLSearchParams(""));
+  container.querySelector("#bulk-machine-names").value = "新機種A\n\n新機種B\n新機種A\n既存機種";
+  container.querySelector("#bulk-add-btn").click();
+  await wait();
+
+  const machines = await listMachines(db);
+  assert.deepEqual(
+    machines.map((m) => m.name).sort(),
+    ["新機種A", "新機種B", "既存機種"].sort()
+  );
+  assert.match(container.textContent, /2件登録しました/);
+  assert.match(container.textContent, /2件は空欄または重複のためスキップ/);
+});
+
 await test("機種フォーム: 履歴がある機種は削除ボタンが出ない", async (db, container) => {
   const shopId = await createShop(db, { name: "店", exchange_rate: "20", lending_rate: "20" });
   const machineId = await createMachine(db, { name: "使用済み機種" });

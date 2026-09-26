@@ -497,6 +497,28 @@ export async function unarchiveMachine(db, machineId) {
   await put(db, MACHINES, { ...machine, is_archived: 0, updated_at: nowIso() });
 }
 
+/**
+ * 機種名のリストをまとめて登録する（P-WORLDスクレイピング結果の貼り付けなど向け）。
+ * 空行・重複行・既存の機種名はスキップし、新規分だけ登録する。
+ */
+export async function bulkCreateMachines(db, rawNames) {
+  const seen = new Set();
+  const created = [];
+  const skipped = [];
+  for (const raw of rawNames) {
+    const name = (raw ?? "").trim();
+    if (!name || seen.has(name) || (await nameExists(db, MACHINES, name))) {
+      if (name) skipped.push(name);
+      continue;
+    }
+    seen.add(name);
+    const timestamp = nowIso();
+    await add(db, MACHINES, { name, maker: null, memo: null, is_archived: 0, created_at: timestamp, updated_at: timestamp });
+    created.push(name);
+  }
+  return { created, skipped };
+}
+
 export async function deleteMachine(db, machineId) {
   if (await machineHasHistory(db, machineId)) {
     throw new ValidationError("この機種には記録があるため削除できません。アーカイブを使ってください。");
