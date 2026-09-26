@@ -514,6 +514,14 @@ export async function getMachine(db, machineId) {
   return getById(db, MACHINES, machineId);
 }
 
+/** 記録がある年の範囲（最小・最大）を返す。1件も無ければnull。カレンダーの年月ピッカー用。 */
+export async function getRecordYearRange(db) {
+  const records = await getAll(db, RECORDS);
+  if (records.length === 0) return null;
+  const years = records.map((r) => parseInt(r.play_date.slice(0, 4), 10));
+  return { min: Math.min(...years), max: Math.max(...years) };
+}
+
 // ---------------------------------------------------------------------------
 // 収支分析（reports）：Flask版 app/routes/reports.py 相当の集計
 // ---------------------------------------------------------------------------

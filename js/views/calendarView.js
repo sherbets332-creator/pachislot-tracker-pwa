@@ -1,7 +1,7 @@
 /**
  * カレンダー（ホーム）画面。Flask版 calendar.py + templates/calendar/*.html 相当。
  */
-import { getRecordsForMonth, computeDisplayProfits } from "../repository.js";
+import { getRecordsForMonth, computeDisplayProfits, getRecordYearRange } from "../repository.js";
 import { commas, profitClass, formatDate, todayDateString } from "../ui/format.js";
 import { renderFlash } from "../ui/flash.js";
 import { buildUrl, navigate } from "../router.js";
@@ -55,6 +55,17 @@ export async function renderCalendar(container, db, query) {
 
   const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
 
+  // 年月ピッカーの選択肢範囲：記録が実際にある年 ± 1年（無ければ今年のみ）をカバーする
+  const yearRange = await getRecordYearRange(db);
+  const minYear = Math.min(today.getFullYear(), year, yearRange?.min ?? today.getFullYear()) - 1;
+  const maxYear = Math.max(today.getFullYear(), year, yearRange?.max ?? today.getFullYear()) + 1;
+  const yearOptionsHtml = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
+    .map((y) => `<option value="${y}" ${y === year ? "selected" : ""}>${y}年</option>`)
+    .join("");
+  const monthOptionsHtml = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map((m) => `<option value="${m}" ${m === month ? "selected" : ""}>${m}月</option>`)
+    .join("");
+
   const rowsHtml = weeks
     .map((week) => {
       const cells = week
@@ -77,8 +88,12 @@ export async function renderCalendar(container, db, query) {
     ${renderFlash()}
     <div class="calendar-header">
       <a class="btn btn-sm" data-nav="prev" href="${buildUrl("/calendar", prev)}">◀</a>
-      <h1>${year}年${month}月</h1>
+      <button type="button" id="ym-toggle" style="background:none;border:none;font-size:1.1rem;font-weight:bold;padding:4px 8px;cursor:pointer;">${year}年${month}月 ▾</button>
       <a class="btn btn-sm" data-nav="next" href="${buildUrl("/calendar", next)}">▶</a>
+    </div>
+    <div id="ym-picker" class="card hidden" style="display:flex;gap:8px;align-items:center;justify-content:center;">
+      <select id="ym-year">${yearOptionsHtml}</select>
+      <select id="ym-month">${monthOptionsHtml}</select>
     </div>
     <div class="text-center mb-3">
       <span class="muted small">当月収支</span>
@@ -90,6 +105,19 @@ export async function renderCalendar(container, db, query) {
     </table>
     <a class="btn btn-primary btn-block mt-3" href="${buildUrl("/records/new", { date: todayStr })}">+ 新規記録を登録</a>
   `;
+
+  // 見出しをタップすると年月選択パネルを開閉する
+  const ymPicker = container.querySelector("#ym-picker");
+  container.querySelector("#ym-toggle").addEventListener("click", () => {
+    ymPicker.classList.toggle("hidden");
+  });
+  function goToSelectedYearMonth() {
+    const selectedYear = parseInt(container.querySelector("#ym-year").value, 10);
+    const selectedMonth = parseInt(container.querySelector("#ym-month").value, 10);
+    navigate("/calendar", { year: selectedYear, month: selectedMonth });
+  }
+  container.querySelector("#ym-year").addEventListener("change", goToSelectedYearMonth);
+  container.querySelector("#ym-month").addEventListener("change", goToSelectedYearMonth);
 
   // スマホでの左右スワイプによる月切り替え
   const table = container.querySelector("#calendar-table");

@@ -67,9 +67,25 @@ function wait(ms = 60) {
 // ---------------------------------------------------------------------------
 await test("カレンダー: 記録が無い月は空のグリッドが描画される", async (db, container) => {
   await renderCalendar(container, db, new URLSearchParams("year=2026&month=9"));
-  assert.match(container.querySelector("h1").textContent, /2026年9月/);
+  assert.match(container.querySelector("#ym-toggle").textContent, /2026年9月/);
   assert.ok(container.querySelector(".calendar-table"));
   assert.ok(container.querySelector('a[href*="/records/new"]'));
+});
+
+await test("カレンダー: 見出しをタップすると年月ピッカーが開閉し、選択すると移動する", async (db, container) => {
+  await renderCalendar(container, db, new URLSearchParams("year=2026&month=9"));
+
+  const picker = container.querySelector("#ym-picker");
+  assert.ok(picker.classList.contains("hidden"), "最初は閉じているはず");
+
+  container.querySelector("#ym-toggle").click();
+  assert.equal(picker.classList.contains("hidden"), false, "タップで開くはず");
+
+  dom.window.location.hash = "#/calendar?year=2026&month=9";
+  container.querySelector("#ym-year").value = "2025";
+  container.querySelector("#ym-year").dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  await wait();
+  assert.equal(dom.window.location.hash, "#/calendar?year=2025&month=9", "選択した年月に遷移するはず");
 });
 
 await test("カレンダー: 記録がある日にその日の表示用収支が出る", async (db, container) => {

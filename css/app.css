@@ -37,6 +37,9 @@ h2 {
 .muted {
   color: #6c757d;
 }
+.hidden {
+  display: none !important;
+}
 .small {
   font-size: 0.8rem;
 }
