@@ -6,6 +6,12 @@ import { startRouter, addRoute, setOnRouteChange, setNotFoundHandler } from "./r
 import { renderCalendar } from "./views/calendarView.js";
 import { renderRecordsDay } from "./views/recordsDayView.js";
 import { renderRecordForm } from "./views/recordFormView.js";
+import { renderShopsList } from "./views/shopsListView.js";
+import { renderShopForm } from "./views/shopFormView.js";
+import { renderShopDetail } from "./views/shopDetailView.js";
+import { renderTransactionForm } from "./views/transactionFormView.js";
+import { renderMachinesList } from "./views/machinesListView.js";
+import { renderMachineForm } from "./views/machineFormView.js";
 
 const dbPromise = openDatabase();
 
@@ -42,6 +48,48 @@ addRoute("/records/:id/edit", async (container, params) => {
 addRoute("/records/day/:date", async (container, params) => {
   const db = await dbPromise;
   await renderRecordsDay(container, db, params.date);
+});
+
+addRoute("/shops", async (container, params, query) => {
+  const db = await dbPromise;
+  await renderShopsList(container, db, query);
+});
+addRoute("/shops/new", async (container) => {
+  const db = await dbPromise;
+  await renderShopForm(container, db, {});
+});
+addRoute("/shops/:id/edit", async (container, params) => {
+  const db = await dbPromise;
+  await renderShopForm(container, db, { shopId: Number(params.id) });
+});
+addRoute("/shops/:id/cashout", async (container, params) => {
+  const db = await dbPromise;
+  await renderTransactionForm(container, db, { shopId: Number(params.id), type: "cashout" });
+});
+addRoute("/shops/:id/adjust", async (container, params) => {
+  const db = await dbPromise;
+  await renderTransactionForm(container, db, { shopId: Number(params.id), type: "adjust" });
+});
+addRoute("/shops/:id/transactions/:txId/edit", async (container, params) => {
+  const db = await dbPromise;
+  await renderTransactionForm(container, db, { shopId: Number(params.id), txId: Number(params.txId) });
+});
+addRoute("/shops/:id", async (container, params) => {
+  const db = await dbPromise;
+  await renderShopDetail(container, db, Number(params.id));
+});
+
+addRoute("/machines", async (container, params, query) => {
+  const db = await dbPromise;
+  await renderMachinesList(container, db, query);
+});
+addRoute("/machines/new", async (container) => {
+  const db = await dbPromise;
+  await renderMachineForm(container, db, {});
+});
+addRoute("/machines/:id/edit", async (container, params) => {
+  const db = await dbPromise;
+  await renderMachineForm(container, db, { machineId: Number(params.id) });
 });
 
 const appContainer = document.getElementById("app");
