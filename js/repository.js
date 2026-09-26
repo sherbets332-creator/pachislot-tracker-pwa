@@ -514,4 +514,113 @@ export async function getMachine(db, machineId) {
   return getById(db, MACHINES, machineId);
 }
 
+// ---------------------------------------------------------------------------
+// 収支分析（reports）：Flask版 app/routes/reports.py 相当の集計
+// ---------------------------------------------------------------------------
+
+/** 表示用収支つきの全記録を返す（集計関数の共通の下ごしらえ）。 */
+async function getAllRecordsWithDisplayProfit(db) {
+  const records = await getAll(db, RECORDS);
+  const displayProfits = await computeDisplayProfits(db, records);
+  return records.map((r) => ({ ...r, display_profit: displayProfits.get(r.id) ?? r.profit_amount }));
+}
+
+/** 年別集計。新しい年が先頭になるよう降順で返す。 */
+export async function getYearlyTotals(db) {
+  const records = await getAllRecordsWithDisplayProfit(db);
+  const byYear = new Map();
+  for (const r of records) {
+    const year = r.play_date.slice(0, 4);
+    const entry = byYear.get(year) || { year, playCount: 0, total: 0 };
+    entry.playCount += 1;
+    entry.total += r.display_profit;
+    byYear.set(year, entry);
+  }
+  return [...byYear.values()].sort((a, b) => b.year.localeCompare(a.year));
+}
+
+/** 月別集計（全期間）。古い月が先頭になるよう昇順で返す（グラフ用）。表・直近N件は呼び出し側で加工する。 */
+export async function getMonthlyTotals(db) {
+  const records = await getAllRecordsWithDisplayProfit(db);
+  const byMonth = new Map();
+  for (const r of records) {
+    const ym = r.play_date.slice(0, 7);
+    const entry = byMonth.get(ym) || { ym, playCount: 0, total: 0 };
+    entry.playCount += 1;
+    entry.total += r.display_profit;
+    byMonth.set(ym, entry);
+  }
+  return [...byMonth.values()].sort((a, b) => a.ym.localeCompare(b.ym));
+}
+
+/** 機種別集計。合計収支の降順。 */
+export async function getMachineTotals(db) {
+  const records = await getAllRecordsWithDisplayProfit(db);
+  const machines = await getAll(db, MACHINES);
+  const nameById = new Map(machines.map((m) => [m.id, m.name]));
+  const byMachine = new Map();
+  for (const r of records) {
+    const entry = byMachine.get(r.machine_id) || {
+      machineId: r.machine_id,
+      machineName: nameById.get(r.machine_id) || "(不明)",
+      playCount: 0,
+      total: 0,
+    };
+    entry.playCount += 1;
+    entry.total += r.display_profit;
+    byMachine.set(r.machine_id, entry);
+  }
+  return [...byMachine.values()]
+    .map((e) => ({ ...e, avgProfit: e.total / e.playCount }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/** 店舗別集計。合計収支の降順。 */
+export async function getShopTotals(db) {
+  const records = await getAllRecordsWithDisplayProfit(db);
+  const shops = await getAll(db, SHOPS);
+  const nameById = new Map(shops.map((s) => [s.id, s.name]));
+  const byShop = new Map();
+  for (const r of records) {
+    const entry = byShop.get(r.shop_id) || {
+      shopId: r.shop_id,
+      shopName: nameById.get(r.shop_id) || "(不明)",
+      playCount: 0,
+      total: 0,
+    };
+    entry.playCount += 1;
+    entry.total += r.display_profit;
+    byShop.set(r.shop_id, entry);
+  }
+  return [...byShop.values()].sort((a, b) => b.total - a.total);
+}
+
+/** 店舗別の貯玉換金額合計（参考情報。収支合計には混ぜない）。 */
+export async function getCashoutTotalsByShop(db) {
+  const txs = await getAll(db, SAVED_BALL_TRANSACTIONS);
+  const shops = await getAll(db, SHOPS);
+  const nameById = new Map(shops.map((s) => [s.id, s.name]));
+  const byShop = new Map();
+  for (const t of txs) {
+    if (t.transaction_type !== "cashout") continue;
+    const entry = byShop.get(t.shop_id) || { shopId: t.shop_id, shopName: nameById.get(t.shop_id) || "(不明)", totalCashout: 0 };
+    entry.totalCashout += t.cash_amount || 0;
+    byShop.set(t.shop_id, entry);
+  }
+  return [...byShop.values()];
+}
+
+/** 獲得元の記録がない貯玉（残高調整由来）の換金差額（店舗別の「その他調整額」）。 */
+export async function getOtherAdjustmentsByShop(db) {
+  const shops = await getAll(db, SHOPS);
+  const result = [];
+  for (const shop of shops) {
+    const realization = await getShopRealization(db, shop.id);
+    if (realization.otherAdjustmentTotal !== 0) {
+      result.push({ shopId: shop.id, shopName: shop.name, total: realization.otherAdjustmentTotal });
+    }
+  }
+  return result;
+}
+
 export { ValidationError };

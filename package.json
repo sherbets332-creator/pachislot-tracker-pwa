@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node js/logic/test/logic.test.js && node js/logic/test/db.test.js && node js/logic/test/repository.test.js && node js/logic/test/views.smoke.test.js && node js/logic/test/shopsMachines.smoke.test.js"
+    "test": "node js/logic/test/logic.test.js && node js/logic/test/db.test.js && node js/logic/test/repository.test.js && node js/logic/test/views.smoke.test.js && node js/logic/test/shopsMachines.smoke.test.js && node js/logic/test/reports.smoke.test.js"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",

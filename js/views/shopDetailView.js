@@ -1,10 +1,10 @@
 /**
  * 店舗詳細画面。Flask版 templates/shops/detail.html 相当。
- * 貯玉残高推移グラフ（Chart.js相当）は収支分析画面と合わせて別途対応する。
  */
-import { getShop, getShopBalance, getShopLedgerDetailed, getShopRealization } from "../repository.js";
+import { getShop, getShopBalance, getShopBalanceHistory, getShopLedgerDetailed, getShopRealization } from "../repository.js";
 import { renderFlash, setFlash } from "../ui/flash.js";
 import { commas, profitClass, escapeHtml } from "../ui/format.js";
+import { renderLineChart } from "../ui/simpleChart.js";
 import { buildUrl, navigate } from "../router.js";
 
 const TYPE_LABELS = { earn: "獲得", use: "使用", cashout: "換金", adjust: "調整" };
@@ -20,6 +20,16 @@ export async function renderShopDetail(container, db, shopId) {
   const balance = await getShopBalance(db, shopId);
   const ledger = await getShopLedgerDetailed(db, shopId);
   const realization = await getShopRealization(db, shopId);
+  const balanceHistory = await getShopBalanceHistory(db, shopId);
+
+  const balanceChartHtml = balanceHistory.length
+    ? `<div style="overflow-x:auto;"><div style="min-width:280px;">${renderLineChart({
+        labels: balanceHistory.map(([date]) => date.slice(5)),
+        values: balanceHistory.map(([, v]) => v),
+        color: "#0d6efd",
+        fill: true,
+      })}</div></div>`
+    : `<p class="muted small">まだ貯玉の増減履歴がありません。</p>`;
 
   const adjustmentRows = realization.entries.length
     ? `<table class="simple">
@@ -91,6 +101,9 @@ export async function renderShopDetail(container, db, shopId) {
         <a class="btn btn-sm" href="${buildUrl(`/shops/${shopId}/adjust`)}">残高調整</a>
       </div>
     </div>
+
+    <h2>貯玉残高の推移</h2>
+    <div class="card">${balanceChartHtml}</div>
 
     <h2>換金差額調整履歴</h2>
     ${adjustmentRows}
