@@ -21,6 +21,10 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
   - Node.jsで単体テスト済み（`js/logic/test/logic.test.js`）。Flask版と同じシナリオで
     完全に同じ計算結果になることを確認済み
 - ✅ IndexedDB層（`js/db.js`）：4オブジェクトストア（shops/machines/records/saved_ball_transactions）と汎用CRUD。fake-indexeddb（開発時のみ）でNode上からテスト済み
+- ✅ リポジトリ層（`js/repository.js`）：Flask版のroutes（records/shops/machines）に相当する実際の操作
+  （記録の作成・編集・削除、店舗・機種マスタのCRUD・アーカイブ・削除、貯玉換金・残高調整の作成・編集・削除、
+  表示用収支の計算）。Flask版で検証済みの全シナリオ（残高不足チェック・FIFO実現差額・獲得数超過チェック・
+  編集/削除時の連鎖チェック）を同じ結果になることを確認済み
 - ⬜ 画面（カレンダー・記録入力・店舗/機種マスタ・収支分析）：未着手
 - ⬜ Service Worker・manifest.json（オフライン対応・ホーム画面追加）：未着手
 - ⬜ Flask版DBからのデータ移行スクリプト：未着手

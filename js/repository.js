@@ -1,0 +1,517 @@
+/**
+ * アプリの操作（記録の作成・編集・削除、店舗・機種マスタ、貯玉換金・残高調整）をまとめる層。
+ * Flask版の app/routes/{records,shops,machines}.py に相当する。
+ *
+ * Flask版との大きな違い：
+ * - record_realization_adjustments はDBに保存しない。店舗の台帳が変わっても
+ *   「recalculate_shop_ledger」のような明示的な再計算呼び出しは不要で、
+ *   表示のたびに computeDisplayProfits() / getShopRealization() がその場で導出する。
+ * - 全ての公開関数は ValidationError を投げることがある。呼び出し側（UI）で
+ *   catchしてメッセージを表示すること。
+ */
+import { STORE_NAMES, getAll, getAllByIndex, getById, add, put, remove, nameExists } from "./db.js";
+import { calculateProfit } from "./logic/profitCalculator.js";
+import { getBalance, getBalanceHistory, getLedger } from "./logic/savedBallLedger.js";
+import { recalculateShopLedger } from "./logic/savedBallRealization.js";
+import {
+  ValidationError,
+  checkBalanceNeverNegative,
+  checkEarnedNotExceedingPayout,
+  parseIntField,
+  parseFloatField,
+  requireText,
+  requireDate,
+  toHalfWidth,
+} from "./logic/validation.js";
+
+const { SHOPS, MACHINES, RECORDS, SAVED_BALL_TRANSACTIONS } = STORE_NAMES;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+// ---------------------------------------------------------------------------
+// 共通ヘルパー
+// ---------------------------------------------------------------------------
+
+async function getShopTransactions(db, shopId) {
+  return getAllByIndex(db, SAVED_BALL_TRANSACTIONS, "shop_id", shopId);
+}
+
+async function getRecordTransactions(db, recordId) {
+  return getAllByIndex(db, SAVED_BALL_TRANSACTIONS, "record_id", recordId);
+}
+
+/** この店舗に記録・貯玉履歴のいずれかがあるか（削除可否の判定に使う）。 */
+export async function shopHasHistory(db, shopId) {
+  const records = await getAllByIndex(db, RECORDS, "shop_id", shopId);
+  if (records.length > 0) return true;
+  const txs = await getShopTransactions(db, shopId);
+  return txs.length > 0;
+}
+
+/** この機種に記録があるか。 */
+export async function machineHasHistory(db, machineId) {
+  const records = await getAllByIndex(db, RECORDS, "machine_id", machineId);
+  return records.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// 記録（records）
+// ---------------------------------------------------------------------------
+
+/**
+ * フォーム相当の入力から、保存用フィールドを検証・組み立てる。
+ * @param {object} form { play_date, shop_id, machine_id, machine_number, cash_investment,
+ *   saved_ball_used, payout_count, saved_ball_earned, memo, manual_profit_amount }
+ *   数値系はすべて文字列で渡してよい（全角数字も対応）。
+ */
+async function buildRecordFields(db, form, { excludeRecordId = null } = {}) {
+  const playDate = requireDate(form.play_date, "日付");
+  const shopId = parseIntField(form.shop_id, "店舗", { minimum: 1 });
+  const machineId = parseIntField(form.machine_id, "機種", { minimum: 1 });
+  const cashInvestment = parseIntField(form.cash_investment, "現金投資", { required: false, minimum: 0 });
+  const savedBallUsed = parseIntField(form.saved_ball_used, "貯玉使用枚数", { required: false, minimum: 0 });
+  const payoutCount = parseIntField(form.payout_count, "回収枚数", { required: false, minimum: 0 });
+  const savedBallEarned = parseIntField(form.saved_ball_earned, "貯玉獲得数", { required: false, minimum: 0 });
+  const machineNumber = (form.machine_number ?? "").trim() || null;
+  const memo = (form.memo ?? "").trim() || null;
+
+  checkEarnedNotExceedingPayout(savedBallEarned, payoutCount);
+
+  const shop = await getById(db, SHOPS, shopId);
+  if (!shop) throw new ValidationError("選択した店舗が見つかりません。");
+  const machine = await getById(db, MACHINES, machineId);
+  if (!machine) throw new ValidationError("選択した機種が見つかりません。");
+
+  const exchangeRateUsed = shop.exchange_rate;
+  const lendingRateUsed = shop.lending_rate;
+
+  // この記録のuse/earnを除いた台帳に、新しい値のuse/earnを反映して
+  // 残高が一度でもマイナスにならないかを検証する（record作成・編集どちらでも常に行う。
+  // 貯玉獲得数を減らしただけでも、後の記録の使用分が足りなくなることがあるため）。
+  const proposed = [];
+  if (savedBallUsed > 0) proposed.push({ transaction_date: playDate, transaction_type: "use", ball_count: savedBallUsed });
+  if (savedBallEarned > 0) proposed.push({ transaction_date: playDate, transaction_type: "earn", ball_count: savedBallEarned });
+  const shopTxs = await getShopTransactions(db, shopId);
+  checkBalanceNeverNegative(shopTxs, proposed, { excludeRecordId });
+
+  let profitAmount;
+  let profitIsManual;
+  const manualRaw = (form.manual_profit_amount ?? "").toString().trim();
+  if (manualRaw !== "") {
+    const halfWidth = toHalfWidth(manualRaw);
+    if (!/^-?\d+$/.test(halfWidth)) {
+      throw new ValidationError("手動入力の収支金額には整数を入力してください。");
+    }
+    profitAmount = parseInt(halfWidth, 10);
+    profitIsManual = 1;
+  } else {
+    profitAmount = calculateProfit(cashInvestment, savedBallUsed, payoutCount, exchangeRateUsed);
+    profitIsManual = 0;
+  }
+
+  return {
+    play_date: playDate,
+    shop_id: shopId,
+    machine_id: machineId,
+    machine_number: machineNumber,
+    cash_investment: cashInvestment,
+    saved_ball_used: savedBallUsed,
+    payout_count: payoutCount,
+    saved_ball_earned: savedBallEarned,
+    exchange_rate_used: exchangeRateUsed,
+    lending_rate_used: lendingRateUsed,
+    profit_amount: profitAmount,
+    profit_is_manual: profitIsManual,
+    memo,
+  };
+}
+
+/** 記録保存時に、その記録に紐づく use/earn 行を作り直す（既存分はすべて削除してから作り直す）。 */
+async function syncRecordTransactions(db, recordId, fields) {
+  const existing = await getRecordTransactions(db, recordId);
+  for (const tx of existing) {
+    await remove(db, SAVED_BALL_TRANSACTIONS, tx.id);
+  }
+  if (fields.saved_ball_used > 0) {
+    await add(db, SAVED_BALL_TRANSACTIONS, {
+      shop_id: fields.shop_id,
+      record_id: recordId,
+      transaction_date: fields.play_date,
+      transaction_type: "use",
+      ball_count: fields.saved_ball_used,
+      cash_amount: null,
+      exchange_rate_used: null,
+      memo: null,
+    });
+  }
+  if (fields.saved_ball_earned > 0) {
+    await add(db, SAVED_BALL_TRANSACTIONS, {
+      shop_id: fields.shop_id,
+      record_id: recordId,
+      transaction_date: fields.play_date,
+      transaction_type: "earn",
+      ball_count: fields.saved_ball_earned,
+      cash_amount: null,
+      exchange_rate_used: fields.exchange_rate_used,
+      memo: null,
+    });
+  }
+}
+
+export async function createRecord(db, form) {
+  const fields = await buildRecordFields(db, form);
+  const timestamp = nowIso();
+  const recordId = await add(db, RECORDS, { ...fields, created_at: timestamp, updated_at: timestamp });
+  await syncRecordTransactions(db, recordId, fields);
+  return recordId;
+}
+
+export async function updateRecord(db, recordId, form) {
+  const existing = await getById(db, RECORDS, recordId);
+  if (!existing) throw new ValidationError("記録が見つかりませんでした。");
+  const fields = await buildRecordFields(db, form, { excludeRecordId: recordId });
+  await put(db, RECORDS, { ...existing, ...fields, id: recordId, updated_at: nowIso() });
+  await syncRecordTransactions(db, recordId, fields);
+  return recordId;
+}
+
+export async function deleteRecord(db, recordId) {
+  const existing = await getById(db, RECORDS, recordId);
+  if (!existing) return;
+
+  // この記録の use/earn を丸ごと取り除いた場合に、他の記録・換金・調整が
+  // 使っている分が足りなくなって残高がマイナスにならないかを確認する。
+  const shopTxs = await getShopTransactions(db, existing.shop_id);
+  checkBalanceNeverNegative(shopTxs, [], { excludeRecordId: recordId });
+
+  const ownTxs = await getRecordTransactions(db, recordId);
+  for (const tx of ownTxs) {
+    await remove(db, SAVED_BALL_TRANSACTIONS, tx.id);
+  }
+  await remove(db, RECORDS, recordId);
+}
+
+export async function getRecord(db, recordId) {
+  return getById(db, RECORDS, recordId);
+}
+
+export async function getRecordsForDate(db, date) {
+  return getAllByIndex(db, RECORDS, "play_date", date);
+}
+
+/** "YYYY-MM" の月に属する記録を返す（play_dateの前方一致）。 */
+export async function getRecordsForMonth(db, year, month) {
+  const prefix = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
+  const all = await getAll(db, RECORDS);
+  return all.filter((r) => r.play_date.startsWith(prefix));
+}
+
+/**
+ * 複数の記録に対して、表示用収支（profit_amount + 実現差額調整）をまとめて計算する。
+ * @returns {Map<number, number>} record_id -> 表示用収支
+ */
+export async function computeDisplayProfits(db, records) {
+  const shopIds = [...new Set(records.map((r) => r.shop_id))];
+  const displayProfits = new Map();
+  const adjustmentsByShop = new Map();
+
+  for (const shopId of shopIds) {
+    const txs = await getShopTransactions(db, shopId);
+    adjustmentsByShop.set(shopId, recalculateShopLedger(txs).adjustmentsByRecordId);
+  }
+
+  for (const record of records) {
+    const adjustments = adjustmentsByShop.get(record.shop_id);
+    const adjustment = adjustments ? adjustments.get(record.id) || 0 : 0;
+    displayProfits.set(record.id, record.profit_amount + adjustment);
+  }
+  return displayProfits;
+}
+
+// ---------------------------------------------------------------------------
+// 店舗（shops）
+// ---------------------------------------------------------------------------
+
+async function validateRate(raw, label) {
+  return parseFloatField(raw, label, { minimum: 0 });
+}
+
+export async function createShop(db, form) {
+  const name = requireText(form.name, "店舗名");
+  if (await nameExists(db, SHOPS, name)) {
+    throw new ValidationError("その店舗名はすでに登録されています。");
+  }
+  const exchangeRate = await validateRate(form.exchange_rate, "換金レート");
+  const lendingRate = await validateRate(form.lending_rate, "貸し出しレート");
+  const timestamp = nowIso();
+  return add(db, SHOPS, {
+    name,
+    exchange_rate: exchangeRate,
+    lending_rate: lendingRate,
+    address: (form.address ?? "").trim() || null,
+    memo: (form.memo ?? "").trim() || null,
+    is_archived: 0,
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+}
+
+export async function updateShop(db, shopId, form) {
+  const existing = await getById(db, SHOPS, shopId);
+  if (!existing) throw new ValidationError("店舗が見つかりませんでした（削除済みの可能性があります）。");
+  const name = requireText(form.name, "店舗名");
+  if (await nameExists(db, SHOPS, name, shopId)) {
+    throw new ValidationError("その店舗名はすでに登録されています。");
+  }
+  const exchangeRate = await validateRate(form.exchange_rate, "換金レート");
+  const lendingRate = await validateRate(form.lending_rate, "貸し出しレート");
+  await put(db, SHOPS, {
+    ...existing,
+    name,
+    exchange_rate: exchangeRate,
+    lending_rate: lendingRate,
+    address: (form.address ?? "").trim() || null,
+    memo: (form.memo ?? "").trim() || null,
+    updated_at: nowIso(),
+  });
+}
+
+export async function archiveShop(db, shopId) {
+  const shop = await getById(db, SHOPS, shopId);
+  if (!shop) return;
+  await put(db, SHOPS, { ...shop, is_archived: 1, updated_at: nowIso() });
+}
+
+export async function unarchiveShop(db, shopId) {
+  const shop = await getById(db, SHOPS, shopId);
+  if (!shop) return;
+  await put(db, SHOPS, { ...shop, is_archived: 0, updated_at: nowIso() });
+}
+
+export async function deleteShop(db, shopId) {
+  if (await shopHasHistory(db, shopId)) {
+    throw new ValidationError("この店舗には記録・貯玉履歴があるため削除できません。アーカイブを使ってください。");
+  }
+  await remove(db, SHOPS, shopId);
+}
+
+export async function listShops(db, { includeArchived = false } = {}) {
+  const all = await getAll(db, SHOPS);
+  const filtered = all.filter((s) => (includeArchived ? s.is_archived === 1 : s.is_archived !== 1));
+  return filtered.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+}
+
+export async function getShop(db, shopId) {
+  return getById(db, SHOPS, shopId);
+}
+
+export async function getShopBalance(db, shopId) {
+  const txs = await getShopTransactions(db, shopId);
+  return getBalance(txs);
+}
+
+export async function getShopBalanceHistory(db, shopId) {
+  const txs = await getShopTransactions(db, shopId);
+  return getBalanceHistory(txs);
+}
+
+export async function getShopRealization(db, shopId) {
+  const txs = await getShopTransactions(db, shopId);
+  return recalculateShopLedger(txs);
+}
+
+/** 店舗の貯玉増減履歴を、機種名・記録日付を付加した形で時系列順に返す。 */
+export async function getShopLedgerDetailed(db, shopId) {
+  const txs = await getShopTransactions(db, shopId);
+  const sorted = getLedger(txs);
+  const result = [];
+  for (const tx of sorted) {
+    let machineName = null;
+    let recordPlayDate = null;
+    if (tx.record_id !== null && tx.record_id !== undefined) {
+      const record = await getById(db, RECORDS, tx.record_id);
+      if (record) {
+        recordPlayDate = record.play_date;
+        const machine = await getById(db, MACHINES, record.machine_id);
+        machineName = machine ? machine.name : null;
+      }
+    }
+    result.push({ ...tx, machine_name: machineName, record_play_date: recordPlayDate });
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// 貯玉換金・残高調整（saved_ball_transactions の cashout / adjust）
+// ---------------------------------------------------------------------------
+
+export async function createCashout(db, shopId, form) {
+  const shop = await getById(db, SHOPS, shopId);
+  if (!shop) throw new ValidationError("店舗が見つかりませんでした（削除済みの可能性があります）。");
+
+  const transactionDate = requireDate(form.transaction_date, "日付");
+  const ballCount = parseIntField(form.ball_count, "換金枚数", { minimum: 1 });
+  const cashAmount = parseIntField(form.cash_amount, "受取現金額", { minimum: 0 });
+
+  const shopTxs = await getShopTransactions(db, shopId);
+  checkBalanceNeverNegative(shopTxs, [{ transaction_date: transactionDate, transaction_type: "cashout", ball_count: ballCount }]);
+
+  return add(db, SAVED_BALL_TRANSACTIONS, {
+    shop_id: shopId,
+    record_id: null,
+    transaction_date: transactionDate,
+    transaction_type: "cashout",
+    ball_count: ballCount,
+    cash_amount: cashAmount,
+    exchange_rate_used: null,
+    memo: (form.memo ?? "").trim() || null,
+  });
+}
+
+export async function createAdjust(db, shopId, form) {
+  const shop = await getById(db, SHOPS, shopId);
+  if (!shop) throw new ValidationError("店舗が見つかりませんでした（削除済みの可能性があります）。");
+
+  const transactionDate = requireDate(form.transaction_date, "日付");
+  const ballCount = parseIntField(form.ball_count, "調整枚数");
+  if (ballCount === 0) throw new ValidationError("調整枚数は0以外の値を入力してください。");
+  if (ballCount < 0) {
+    const shopTxs = await getShopTransactions(db, shopId);
+    checkBalanceNeverNegative(shopTxs, [{ transaction_date: transactionDate, transaction_type: "adjust", ball_count: ballCount }]);
+  }
+
+  return add(db, SAVED_BALL_TRANSACTIONS, {
+    shop_id: shopId,
+    record_id: null,
+    transaction_date: transactionDate,
+    transaction_type: "adjust",
+    ball_count: ballCount,
+    cash_amount: null,
+    exchange_rate_used: ballCount > 0 ? shop.exchange_rate : null,
+    memo: (form.memo ?? "").trim() || null,
+  });
+}
+
+/** 換金・残高調整（cashout/adjust）の履歴を編集する。earn/useはここでは扱わない。 */
+export async function updateTransaction(db, shopId, txId, form) {
+  const tx = await getById(db, SAVED_BALL_TRANSACTIONS, txId);
+  if (!tx || tx.shop_id !== shopId || !["cashout", "adjust"].includes(tx.transaction_type)) {
+    throw new ValidationError("編集できない履歴です。");
+  }
+  const shop = await getById(db, SHOPS, shopId);
+  const transactionDate = requireDate(form.transaction_date, "日付");
+  const shopTxs = await getShopTransactions(db, shopId);
+
+  if (tx.transaction_type === "cashout") {
+    const ballCount = parseIntField(form.ball_count, "換金枚数", { minimum: 1 });
+    const cashAmount = parseIntField(form.cash_amount, "受取現金額", { minimum: 0 });
+    checkBalanceNeverNegative(
+      shopTxs,
+      [{ transaction_date: transactionDate, transaction_type: "cashout", ball_count: ballCount }],
+      { excludeTransactionId: txId }
+    );
+    await put(db, SAVED_BALL_TRANSACTIONS, {
+      ...tx,
+      transaction_date: transactionDate,
+      ball_count: ballCount,
+      cash_amount: cashAmount,
+      memo: (form.memo ?? "").trim() || null,
+    });
+  } else {
+    const ballCount = parseIntField(form.ball_count, "調整枚数");
+    if (ballCount === 0) throw new ValidationError("調整枚数は0以外の値を入力してください。");
+    if (ballCount < 0) {
+      checkBalanceNeverNegative(
+        shopTxs,
+        [{ transaction_date: transactionDate, transaction_type: "adjust", ball_count: ballCount }],
+        { excludeTransactionId: txId }
+      );
+    }
+    await put(db, SAVED_BALL_TRANSACTIONS, {
+      ...tx,
+      transaction_date: transactionDate,
+      ball_count: ballCount,
+      exchange_rate_used: ballCount > 0 ? shop.exchange_rate : null,
+      memo: (form.memo ?? "").trim() || null,
+    });
+  }
+}
+
+export async function deleteTransaction(db, shopId, txId) {
+  const tx = await getById(db, SAVED_BALL_TRANSACTIONS, txId);
+  if (!tx || tx.shop_id !== shopId || !["cashout", "adjust"].includes(tx.transaction_type)) {
+    throw new ValidationError("削除できない履歴です。");
+  }
+  const shopTxs = await getShopTransactions(db, shopId);
+  checkBalanceNeverNegative(shopTxs, [], { excludeTransactionId: txId });
+  await remove(db, SAVED_BALL_TRANSACTIONS, txId);
+}
+
+// ---------------------------------------------------------------------------
+// 機種（machines）
+// ---------------------------------------------------------------------------
+
+export async function createMachine(db, form) {
+  const name = requireText(form.name, "機種名");
+  if (await nameExists(db, MACHINES, name)) {
+    throw new ValidationError("その機種名はすでに登録されています。");
+  }
+  const timestamp = nowIso();
+  return add(db, MACHINES, {
+    name,
+    maker: (form.maker ?? "").trim() || null,
+    memo: (form.memo ?? "").trim() || null,
+    is_archived: 0,
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+}
+
+export async function updateMachine(db, machineId, form) {
+  const existing = await getById(db, MACHINES, machineId);
+  if (!existing) throw new ValidationError("機種が見つかりませんでした。");
+  const name = requireText(form.name, "機種名");
+  if (await nameExists(db, MACHINES, name, machineId)) {
+    throw new ValidationError("その機種名はすでに登録されています。");
+  }
+  await put(db, MACHINES, {
+    ...existing,
+    name,
+    maker: (form.maker ?? "").trim() || null,
+    memo: (form.memo ?? "").trim() || null,
+    updated_at: nowIso(),
+  });
+}
+
+export async function archiveMachine(db, machineId) {
+  const machine = await getById(db, MACHINES, machineId);
+  if (!machine) return;
+  await put(db, MACHINES, { ...machine, is_archived: 1, updated_at: nowIso() });
+}
+
+export async function unarchiveMachine(db, machineId) {
+  const machine = await getById(db, MACHINES, machineId);
+  if (!machine) return;
+  await put(db, MACHINES, { ...machine, is_archived: 0, updated_at: nowIso() });
+}
+
+export async function deleteMachine(db, machineId) {
+  if (await machineHasHistory(db, machineId)) {
+    throw new ValidationError("この機種には記録があるため削除できません。アーカイブを使ってください。");
+  }
+  await remove(db, MACHINES, machineId);
+}
+
+export async function listMachines(db, { includeArchived = false } = {}) {
+  const all = await getAll(db, MACHINES);
+  const filtered = all.filter((m) => (includeArchived ? m.is_archived === 1 : m.is_archived !== 1));
+  return filtered.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+}
+
+export async function getMachine(db, machineId) {
+  return getById(db, MACHINES, machineId);
+}
+
+export { ValidationError };
