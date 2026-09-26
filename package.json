@@ -1,0 +1,13 @@
+{
+  "name": "pachislot-tracker-pwa",
+  "version": "1.0.0",
+  "description": "iPhone(Safari)単体で完結させる版。サーバー不要、データはブラウザのIndexedDBに保存する。開発時のテスト（fake-indexeddb）以外、npm/ビルドツールには依存しない。",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node js/logic/test/logic.test.js && node js/logic/test/db.test.js"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.5"
+  }
+}

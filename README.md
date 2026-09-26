@@ -20,7 +20,7 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
   実現差額調整・入力バリデーション（残高マイナス化防止など）
   - Node.jsで単体テスト済み（`js/logic/test/logic.test.js`）。Flask版と同じシナリオで
     完全に同じ計算結果になることを確認済み
-- ⬜ IndexedDB層（`js/db.js`）：未着手
+- ✅ IndexedDB層（`js/db.js`）：4オブジェクトストア（shops/machines/records/saved_ball_transactions）と汎用CRUD。fake-indexeddb（開発時のみ）でNode上からテスト済み
 - ⬜ 画面（カレンダー・記録入力・店舗/機種マスタ・収支分析）：未着手
 - ⬜ Service Worker・manifest.json（オフライン対応・ホーム画面追加）：未着手
 - ⬜ Flask版DBからのデータ移行スクリプト：未着手
@@ -31,5 +31,6 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
 Node.js（開発時のみ使用。本番のPWA自体はNode不要でSafariだけで動く）：
 
 ```
-node js/logic/test/logic.test.js
+npm install
+npm test
 ```
