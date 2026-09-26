@@ -5,7 +5,8 @@
 
 body {
   margin: 0;
-  padding-bottom: 72px;
+  /* 下部ナビの高さ＋iPhoneのホームインジケーター分の余白を確保する */
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   background: #f5f5f7;
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
   color: #212529;
@@ -247,6 +248,9 @@ table.simple td {
   background: #fff;
   border-top: 1px solid #ddd;
   z-index: 1000;
+  /* iPhoneのホームインジケーター（画面下端のジェスチャー領域）とボタンが被らないよう、
+     ナビ自体の高さにセーフエリア分を足しておく（中身は上に寄る）。 */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .bottom-nav-inner {
   display: flex;
@@ -256,10 +260,14 @@ table.simple td {
 .bottom-nav a {
   flex: 1;
   text-align: center;
-  padding: 8px 0;
+  padding: 10px 0;
   font-size: 0.75rem;
   color: #666;
   text-decoration: none;
+}
+.bottom-nav .nav-icon {
+  font-size: 1.4rem;
+  line-height: 1;
 }
 .bottom-nav a.active {
   color: #0d6efd;
