@@ -120,6 +120,21 @@ export async function remove(db, storeName, id) {
   await promisifyTransaction(tx);
 }
 
+/** ストアの中身を全部消す（インポート時、既存データを丸ごと置き換えるために使う）。 */
+export async function clear(db, storeName) {
+  const tx = db.transaction(storeName, "readwrite");
+  tx.objectStore(storeName).clear();
+  await promisifyTransaction(tx);
+}
+
+/** 複数件を1つのトランザクションでまとめて書き込む（インポート用。id付きで渡せばそのidのまま入る）。 */
+export async function bulkPut(db, storeName, items) {
+  const tx = db.transaction(storeName, "readwrite");
+  const store = tx.objectStore(storeName);
+  for (const item of items) store.put(item);
+  await promisifyTransaction(tx);
+}
+
 /**
  * 名前の重複チェック（shops/machinesのUNIQUE制約の代わり）。
  * excludeId を指定すると、そのidのレコード自身は重複判定から除外する（編集時用）。

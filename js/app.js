@@ -13,6 +13,7 @@ import { renderTransactionForm } from "./views/transactionFormView.js";
 import { renderMachinesList } from "./views/machinesListView.js";
 import { renderMachineForm } from "./views/machineFormView.js";
 import { renderReports } from "./views/reportsView.js";
+import { renderSettings } from "./views/settingsView.js";
 
 const dbPromise = openDatabase();
 
@@ -96,6 +97,11 @@ addRoute("/machines/:id/edit", async (container, params) => {
 addRoute("/reports", async (container) => {
   const db = await dbPromise;
   await renderReports(container, db);
+});
+
+addRoute("/settings", async (container) => {
+  const db = await dbPromise;
+  await renderSettings(container, db);
 });
 
 const appContainer = document.getElementById("app");

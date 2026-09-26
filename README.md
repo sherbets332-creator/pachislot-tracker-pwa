@@ -11,8 +11,8 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
 - ビルド不要のバニラJavaScript（ES Modules）。npmのビルドツールは使わない
 - データはIndexedDB（店舗・機種・記録・貯玉台帳の4ストア。実現差額調整は保存せず、
   表示のたびにその場でFIFO計算をやり直して導出する）
-- GitHub Pagesで公開し、iPhoneのSafariで「ホーム画面に追加」して使う
-- Flask版のDBからのデータ移行、PWA↔PC間の手動エクスポート/インポートに対応予定
+- GitHub Pagesで公開し、iPhoneのSafariで「ホーム画面に追加」して使う（公開はまだ）
+- Flask版のDBからのデータ移行、PWA↔PC間の手動エクスポート/インポートに対応済み
 
 ## 現状の実装状況
 
@@ -36,8 +36,11 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
   手書きで維持しなくて済むよう stale-while-revalidate 方式（キャッシュがあれば即返しつつ裏で
   更新、初回だけオンライン必須）。`manifest.json`＋iOS用のApple独自metaタグ（apple-touch-icon等）
   も追加。アイコンはPillow等を使わず標準ライブラリzlibだけで生成（`scripts/generate_icons.py`）
-- ⬜ Flask版DBからのデータ移行スクリプト：未着手
-- ⬜ PC↔PWA間の手動エクスポート/インポート機能：未着手
+- ✅ データのエクスポート/インポート（「その他」画面、`js/dataTransfer.js`）：JSONファイルへの
+  書き出し・読み込み（読み込みは全置き換え、要確認）。Flask版の`scripts/export_for_pwa.py`が
+  同じ形式で書き出すので、そのままインポートできる。実際のFlask版本番DB（17記録・25取引）で
+  往復させ、貯玉残高・全期間収支合計ともFlask版の実際の値と完全一致することを確認済み
+- ⬜ GitHubへのpush・GitHub Pagesでの公開：未着手（まだローカルのみ）
 
 ## テストの実行方法
 
