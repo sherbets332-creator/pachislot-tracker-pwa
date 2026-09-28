@@ -30,6 +30,7 @@ import {
   updateTransaction,
   deleteTransaction,
   getShopBalance,
+  getShopSavedBallUsageGain,
   getShopRealization,
 } from "../../repository.js";
 
@@ -105,6 +106,7 @@ await test("統合シナリオ: 残高不足チェック・FIFO実現差額・�
   const record2 = await getRecord(db, record2Id);
   assert.equal(record2.profit_amount, -18400);
   assert.equal(await getShopBalance(db, shopId), 1080);
+  assert.deepEqual(await getShopSavedBallUsageGain(db, shopId), { totalBalls: 920, totalGain: 1601 });
 
   // 4. さらに翌日1500枚使用 -> 残り1080枚しかないのでエラー
   await assertRejects(

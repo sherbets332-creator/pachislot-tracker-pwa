@@ -1,7 +1,14 @@
 /**
  * 店舗詳細画面。Flask版 templates/shops/detail.html 相当。
  */
-import { getShop, getShopBalance, getShopBalanceHistory, getShopLedgerDetailed, getShopRealization } from "../repository.js";
+import {
+  getShop,
+  getShopBalance,
+  getShopSavedBallUsageGain,
+  getShopBalanceHistory,
+  getShopLedgerDetailed,
+  getShopRealization,
+} from "../repository.js";
 import { renderFlash, setFlash } from "../ui/flash.js";
 import { commas, profitClass, escapeHtml } from "../ui/format.js";
 import { renderLineChart } from "../ui/simpleChart.js";
@@ -18,6 +25,7 @@ export async function renderShopDetail(container, db, shopId) {
   }
 
   const balance = await getShopBalance(db, shopId);
+  const usageGain = await getShopSavedBallUsageGain(db, shopId);
   const ledger = await getShopLedgerDetailed(db, shopId);
   const realization = await getShopRealization(db, shopId);
   const balanceHistory = await getShopBalanceHistory(db, shopId);
@@ -101,6 +109,13 @@ export async function renderShopDetail(container, db, shopId) {
         <a class="btn btn-sm" href="${buildUrl(`/shops/${shopId}/adjust`)}">残高調整</a>
       </div>
     </div>
+
+    ${usageGain.totalGain > 0
+      ? `<div class="card">
+          貯玉 ${commas(usageGain.totalBalls)}枚 使って
+          <span class="plus fw-bold">${commas(usageGain.totalGain)}円</span> 得しました
+        </div>`
+      : ""}
 
     <h2>貯玉残高の推移</h2>
     <div class="card">${balanceChartHtml}</div>

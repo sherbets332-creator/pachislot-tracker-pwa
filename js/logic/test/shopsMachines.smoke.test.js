@@ -173,6 +173,22 @@ await test("店舗詳細: 換金するとFIFO実現差額調整が表示され�
   assert.match(container.textContent, /-1,000円/); // 実現差額
 });
 
+await test("店舗詳細: 貯玉使用による得を残高カードの下に表示する", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "21.74" });
+  const machineId = await createMachine(db, { name: "テスト機種" });
+  await createRecord(db, {
+    play_date: "2026-01-01", shop_id: String(shopId), machine_id: String(machineId),
+    cash_investment: "0", saved_ball_used: "0", payout_count: "2000", saved_ball_earned: "2000",
+  });
+  await createRecord(db, {
+    play_date: "2026-01-02", shop_id: String(shopId), machine_id: String(machineId),
+    cash_investment: "0", saved_ball_used: "920", payout_count: "0", saved_ball_earned: "0",
+  });
+
+  await renderShopDetail(container, db, shopId);
+  assert.match(container.textContent, /貯玉 920枚 使って\s+1,601円 得しました/);
+});
+
 await test("残高調整: 削除で残高が戻る", async (db, container) => {
   const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
 

@@ -19,3 +19,21 @@ export function calculateProfit(cashInvestment, savedBallUsed, payoutCount, exch
 export function calculateLendingReference(savedBallUsed, lendingRateUsed) {
   return pyRound(savedBallUsed * lendingRateUsed);
 }
+
+/** 貯玉を現金の代わりに使ったことで得した枚数・金額を集計する。 */
+export function summarizeSavedBallUsageGain(records) {
+  let totalBalls = 0;
+  let totalGain = 0;
+
+  for (const record of records) {
+    const used = record.saved_ball_used;
+    if (used <= 0) continue;
+
+    totalBalls += used;
+    totalGain +=
+      calculateLendingReference(used, record.lending_rate_used)
+      - pyRound(used * record.exchange_rate_used);
+  }
+
+  return { totalBalls, totalGain };
+}

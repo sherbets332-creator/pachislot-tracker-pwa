@@ -9,7 +9,7 @@
  */
 import assert from "node:assert/strict";
 import { pyRound } from "../numberUtils.js";
-import { calculateProfit, calculateLendingReference } from "../profitCalculator.js";
+import { calculateProfit, calculateLendingReference, summarizeSavedBallUsageGain } from "../profitCalculator.js";
 import { getBalance, getBalanceHistory } from "../savedBallLedger.js";
 import { recalculateShopLedger } from "../savedBallRealization.js";
 import {
@@ -64,6 +64,31 @@ test("calculateProfit: 貯玉使用あり（換金レート統一）", () => {
 test("calculateLendingReference: 貸出レート参考値", () => {
   // 920枚 * 貸出レート21.74円 = 20000.8 -> 銀行丸めで20001
   assert.equal(calculateLendingReference(920, 21.74), 20001);
+});
+
+test("summarizeSavedBallUsageGain: 貯玉使用による得を集計する", () => {
+  const lendingValue = calculateLendingReference(920, 21.74);
+  const exchangeValue = pyRound(920 * 20);
+  assert.deepEqual(
+    summarizeSavedBallUsageGain([
+      { saved_ball_used: 920, lending_rate_used: 21.74, exchange_rate_used: 20 },
+    ]),
+    { totalBalls: 920, totalGain: lendingValue - exchangeValue }
+  );
+});
+
+test("summarizeSavedBallUsageGain: 貯玉使用0枚の記録は無視する", () => {
+  assert.deepEqual(
+    summarizeSavedBallUsageGain([
+      { saved_ball_used: 0, lending_rate_used: 100, exchange_rate_used: 1 },
+      { saved_ball_used: 920, lending_rate_used: 21.74, exchange_rate_used: 20 },
+    ]),
+    { totalBalls: 920, totalGain: calculateLendingReference(920, 21.74) - pyRound(920 * 20) }
+  );
+});
+
+test("summarizeSavedBallUsageGain: 空配列なら0を返す", () => {
+  assert.deepEqual(summarizeSavedBallUsageGain([]), { totalBalls: 0, totalGain: 0 });
 });
 
 // ---------------------------------------------------------------------------

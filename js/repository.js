@@ -10,7 +10,7 @@
  *   catchしてメッセージを表示すること。
  */
 import { STORE_NAMES, getAll, getAllByIndex, getById, add, put, remove, nameExists } from "./db.js";
-import { calculateProfit } from "./logic/profitCalculator.js";
+import { calculateProfit, summarizeSavedBallUsageGain } from "./logic/profitCalculator.js";
 import { getBalance, getBalanceHistory, getLedger } from "./logic/savedBallLedger.js";
 import { recalculateShopLedger } from "./logic/savedBallRealization.js";
 import {
@@ -310,6 +310,11 @@ export async function getShop(db, shopId) {
 export async function getShopBalance(db, shopId) {
   const txs = await getShopTransactions(db, shopId);
   return getBalance(txs);
+}
+
+export async function getShopSavedBallUsageGain(db, shopId) {
+  const records = await getAllByIndex(db, RECORDS, "shop_id", shopId);
+  return summarizeSavedBallUsageGain(records);
 }
 
 export async function getShopBalanceHistory(db, shopId) {
