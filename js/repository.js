@@ -24,7 +24,7 @@ import {
   toHalfWidth,
 } from "./logic/validation.js";
 
-const { SHOPS, MACHINES, RECORDS, SAVED_BALL_TRANSACTIONS, SHOP_MACHINES } = STORE_NAMES;
+const { SHOPS, MACHINES, RECORDS, SAVED_BALL_TRANSACTIONS, SHOP_MACHINES, SETTING_OBSERVATIONS } = STORE_NAMES;
 
 function nowIso() {
   return new Date().toISOString();
@@ -420,6 +420,76 @@ export async function setInstalledMachines(db, shopId, machineIds) {
   for (const machineId of machineIds) {
     await add(db, SHOP_MACHINES, { shop_id: shopId, machine_id: machineId });
   }
+}
+
+// ---------------------------------------------------------------------------
+// 設定判別ツールの観測記録（setting_observations）
+// ---------------------------------------------------------------------------
+
+/**
+ * フォーム入力から setting_observations の1件分のフィールドを組み立てる。
+ * 判別基準は機種ごとに全く違うため、ここでは数値の妥当性チェックだけ行い、
+ * 理論値との突き合わせ（推定）は js/logic/settingReference/ 側の責務にする。
+ */
+function buildSettingObservationFields(form) {
+  const gameCount = parseIntField(form.game_count, "消化ゲーム数", { required: false, minimum: 0 });
+  const atCount = parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
+  const mikoReachCount = parseIntField(form.miko_reach_count, "巫女ポイント0到達回数", { required: false, minimum: 0 });
+  const czWinCount = parseIntField(form.cz_win_count, "CZ当選回数", { required: false, minimum: 0 });
+  const bonusDirectCount = parseIntField(form.bonus_direct_count, "ボーナス直撃回数", { required: false, minimum: 0 });
+
+  if (atCount > gameCount) {
+    throw new ValidationError("AT当選回数が消化ゲーム数を超えています。");
+  }
+  if (czWinCount > mikoReachCount) {
+    throw new ValidationError("CZ当選回数が巫女ポイント0到達回数を超えています。");
+  }
+
+  return {
+    machine_key: (form.machine_key ?? "").toString().trim(),
+    shop_id: form.shop_id ? Number(form.shop_id) : null,
+    machine_id: form.machine_id ? Number(form.machine_id) : null,
+    play_date: requireDate(form.play_date, "日付"),
+    machine_number: (form.machine_number ?? "").toString().trim(),
+    game_count: gameCount,
+    at_count: atCount,
+    miko_reach_count: mikoReachCount,
+    cz_win_count: czWinCount,
+    bonus_direct_count: bonusDirectCount,
+    max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
+    max_payout_over: (form.max_payout_over ?? "none").toString(),
+    memo: (form.memo ?? "").toString().trim(),
+  };
+}
+
+export async function createSettingObservation(db, form) {
+  const fields = buildSettingObservationFields(form);
+  const timestamp = nowIso();
+  return add(db, SETTING_OBSERVATIONS, { ...fields, created_at: timestamp, updated_at: timestamp });
+}
+
+export async function updateSettingObservation(db, observationId, form) {
+  const existing = await getById(db, SETTING_OBSERVATIONS, observationId);
+  if (!existing) throw new ValidationError("観測記録が見つかりませんでした。");
+  const fields = buildSettingObservationFields(form);
+  await put(db, SETTING_OBSERVATIONS, { ...existing, ...fields, id: observationId, updated_at: nowIso() });
+  return observationId;
+}
+
+export async function deleteSettingObservation(db, observationId) {
+  await remove(db, SETTING_OBSERVATIONS, observationId);
+}
+
+export async function getSettingObservation(db, observationId) {
+  return getById(db, SETTING_OBSERVATIONS, observationId);
+}
+
+/** 指定した店舗・機種の観測記録を、日付の新しい順で返す。 */
+export async function listSettingObservations(db, { shopId, machineId } = {}) {
+  let rows = await getAll(db, SETTING_OBSERVATIONS);
+  if (shopId != null) rows = rows.filter((r) => r.shop_id === shopId);
+  if (machineId != null) rows = rows.filter((r) => r.machine_id === machineId);
+  return rows.sort((a, b) => (a.play_date < b.play_date ? 1 : a.play_date > b.play_date ? -1 : b.id - a.id));
 }
 
 // ---------------------------------------------------------------------------

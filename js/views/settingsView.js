@@ -3,12 +3,20 @@
  */
 import { exportAllData, importAllData, buildExportFilename, ImportError } from "../dataTransfer.js";
 import { renderFlash, setFlash } from "../ui/flash.js";
-import { navigate } from "../router.js";
+import { navigate, buildUrl } from "../router.js";
 
 export async function renderSettings(container, db) {
   container.innerHTML = `
     ${renderFlash()}
     <h1>その他</h1>
+
+    <div class="card">
+      <h2 style="margin-top:0;">設定判別ツール</h2>
+      <p class="small muted">
+        対応機種（現在は戦国乙女5のみ）で、遊技中に数えたデータから設定の目安を参考表示します。
+      </p>
+      <a class="btn btn-primary btn-block" href="${buildUrl("/setting-tool")}">設定判別ツールを開く</a>
+    </div>
 
     <div class="card">
       <h2 style="margin-top:0;">データのバックアップ・移行</h2>

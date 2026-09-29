@@ -32,10 +32,13 @@ async function test(name, fn) {
   }
 }
 
-await test("openDatabase: 5つのオブジェクトストアが作られる", async () => {
+await test("openDatabase: 6つのオブジェクトストアが作られる", async () => {
   const db = await openDatabase();
   const names = Array.from(db.objectStoreNames).sort();
-  assert.deepEqual(names, ["machines", "records", "saved_ball_transactions", "shop_machines", "shops"].sort());
+  assert.deepEqual(
+    names,
+    ["machines", "records", "saved_ball_transactions", "shop_machines", "setting_observations", "shops"].sort()
+  );
   db.close();
 });
 

@@ -5,14 +5,15 @@
  * （importはしない）。Node.jsでテストするときは、テストファイル側で
  * fake-indexeddb をグローバルに設定してからこのモジュールをimportすること。
  *
- * テーブル構成（5ストア。設計はFlask版schema.sqlを踏襲しつつ、
+ * テーブル構成（6ストア。設計はFlask版schema.sqlを踏襲しつつ、
  * record_realization_adjustments は保存せず savedBallRealization.js で
  * その場で導出する方針にしたため、5テーブル→4ストアに簡略化している。
- * shop_machines（店舗ごとの設置機種）はFlask版には無い、PWA版独自の追加ストア）。
+ * shop_machines（店舗ごとの設置機種）・setting_observations（設定判別の観測記録）は
+ * Flask版には無い、PWA版独自の追加ストア）。
  */
 
 export const DB_NAME = "pachislot-tracker";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORE_NAMES = Object.freeze({
   SHOPS: "shops",
@@ -20,6 +21,7 @@ export const STORE_NAMES = Object.freeze({
   RECORDS: "records",
   SAVED_BALL_TRANSACTIONS: "saved_ball_transactions",
   SHOP_MACHINES: "shop_machines",
+  SETTING_OBSERVATIONS: "setting_observations",
 });
 
 /** DBを開く（初回はオブジェクトストア・インデックスを作成する）。 */
@@ -64,6 +66,17 @@ export function openDatabase() {
         shopMachines.createIndex("shop_id", "shop_id");
         shopMachines.createIndex("machine_id", "machine_id");
         shopMachines.createIndex("shop_machine", ["shop_id", "machine_id"], { unique: true });
+      }
+
+      // v3: 設定判別ツールの観測記録（1回の遊技セッションごとの実測値。機種ごとの
+      // 判別基準は js/logic/settingReference/ 配下で管理し、対応機種のみこのストアを使う）。
+      if (!db.objectStoreNames.contains(STORE_NAMES.SETTING_OBSERVATIONS)) {
+        const settingObservations = db.createObjectStore(STORE_NAMES.SETTING_OBSERVATIONS, {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+        settingObservations.createIndex("shop_id", "shop_id");
+        settingObservations.createIndex("machine_id", "machine_id");
       }
     };
 

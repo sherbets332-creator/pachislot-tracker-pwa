@@ -16,6 +16,8 @@ import { renderMachineForm } from "./views/machineFormView.js";
 import { renderReports } from "./views/reportsView.js";
 import { renderSettings } from "./views/settingsView.js";
 import { renderRecordsList } from "./views/recordsListView.js";
+import { renderSettingTool } from "./views/settingToolView.js";
+import { renderSettingObservationForm } from "./views/settingObservationFormView.js";
 
 const dbPromise = openDatabase();
 
@@ -112,6 +114,22 @@ addRoute("/reports", async (container) => {
 addRoute("/settings", async (container) => {
   const db = await dbPromise;
   await renderSettings(container, db);
+});
+
+addRoute("/setting-tool", async (container, params, query) => {
+  const db = await dbPromise;
+  await renderSettingTool(container, db, query);
+});
+addRoute("/setting-tool/new", async (container, params, query) => {
+  const db = await dbPromise;
+  await renderSettingObservationForm(container, db, {
+    shopId: query.get("shop_id") ? Number(query.get("shop_id")) : null,
+    machineId: query.get("machine_id") ? Number(query.get("machine_id")) : null,
+  });
+});
+addRoute("/setting-tool/:id/edit", async (container, params) => {
+  const db = await dbPromise;
+  await renderSettingObservationForm(container, db, { observationId: Number(params.id) });
 });
 
 const appContainer = document.getElementById("app");

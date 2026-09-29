@@ -29,6 +29,13 @@ mainブランチにpushすると自動で再デプロイされる。
 - `listShops`/`listMachines`の`includeArchived`は「アーカイブ済み**だけ**返す」トグルであって
   「全部含める」フラグではない（一覧画面のアーカイブ表示切り替え用）。全件（アーカイブ問わず）
   欲しい場合は`listAllShops`/`listAllMachines`を使うこと（過去に取り違えてバグを出した実績あり）
+- 設定判別ツール（`js/logic/settingReference/`）は機種ごとに判別基準が全く違うため、
+  対応機種を追加するときは既存ファイル（`sengokuOtome5.js`）をコピーして新しい機種キーのファイルを
+  1つ追加し、`settingReference/index.js`の`REFERENCES`配列に登録するだけでよい設計にしている。
+  各機種モジュールは`MACHINE_KEY`・`MACHINE_NAME`・`ENDING_STAMPS`・`PAYOUT_OVER_HINTS`・
+  `buildEstimate(obs)`（同じ引数形・戻り値形）を持つ契約を守ること（`settingObservationFormView.js`が
+  この契約に依存している）。機種名は`getReferenceByMachineName`で**完全一致**判定なので、
+  対応機種は機種マスタにその名前どおりに登録してもらう必要がある
 
 ## 開発・テストの進め方
 
@@ -59,9 +66,10 @@ mainブランチにpushすると自動で再デプロイされる。
 ```
 index.html          エントリポイント（<script type="module" src="js/app.js">）
 css/app.css         自前CSS（外部CDN不使用）
-js/logic/           DB非依存の純粋関数（profitCalculator, savedBallLedger, savedBallRealization, validation, numberUtils）
+js/logic/           DB非依存の純粋関数（profitCalculator, savedBallLedger, savedBallRealization, validation, numberUtils, settingInference）
+js/logic/settingReference/  機種ごとの設定判別理論値・推定関数（機種を追加するときはここに1ファイル追加）
 js/logic/test/      npm testで実行される全テスト
-js/db.js            IndexedDBの4ストア（shops/machines/records/saved_ball_transactions）＋汎用CRUD
+js/db.js            IndexedDBの6ストア（shops/machines/records/saved_ball_transactions/shop_machines/setting_observations）＋汎用CRUD
 js/repository.js    実際のアプリ操作（Flask版routesに相当）
 js/views/           画面ごとのレンダリング関数
 js/router.js        ハッシュルーター
