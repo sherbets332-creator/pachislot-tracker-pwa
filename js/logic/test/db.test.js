@@ -12,11 +12,15 @@ import { openDatabase, STORE_NAMES, getAll, getAllByIndex, getById, add, put, re
 let passCount = 0;
 async function test(name, fn) {
   try {
-    // 各テストの前にDBを完全に削除してから開き直す（テスト間の状態漏れを防ぐ）
+    // 各テストの前にDBを完全に削除してから開き直す（テスト間の状態漏れを防ぐ）。
+    // 前のテストが失敗してdb.close()し損ねていると永遠にblockedのままになりうるので、
+    // タイムアウトを設けて早めにエラーとして表面化させる（無言でハングするのを防ぐ）。
     await new Promise((resolve, reject) => {
       const req = indexedDB.deleteDatabase(DB_NAME);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      const timer = setTimeout(() => reject(new Error("deleteDatabaseがblockedのままタイムアウトしました（前のテストのdb.close()漏れの可能性）")), 3000);
+      req.onsuccess = () => { clearTimeout(timer); resolve(); };
+      req.onerror = () => { clearTimeout(timer); reject(req.error); };
+      req.onblocked = () => { clearTimeout(timer); reject(new Error("deleteDatabaseがblockedになりました")); };
     });
     await fn();
     passCount += 1;
@@ -28,10 +32,10 @@ async function test(name, fn) {
   }
 }
 
-await test("openDatabase: 4つのオブジェクトストアが作られる", async () => {
+await test("openDatabase: 5つのオブジェクトストアが作られる", async () => {
   const db = await openDatabase();
   const names = Array.from(db.objectStoreNames).sort();
-  assert.deepEqual(names, ["machines", "records", "saved_ball_transactions", "shops"].sort());
+  assert.deepEqual(names, ["machines", "records", "saved_ball_transactions", "shop_machines", "shops"].sort());
   db.close();
 });
 

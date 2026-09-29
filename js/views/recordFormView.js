@@ -12,6 +12,7 @@ import {
   deleteRecord,
   getShopBalance,
   getShopRealization,
+  getInstalledMachineIds,
   ValidationError,
 } from "../repository.js";
 import { calculateLendingReference } from "../logic/profitCalculator.js";
@@ -74,8 +75,10 @@ export async function renderRecordForm(container, db, { recordId = null, date = 
   const shops = await getShopsForForm(db, currentShopId);
   const machines = await getMachinesForForm(db, currentMachineId);
   const balances = new Map();
+  const installedByShop = new Map();
   for (const shop of shops) {
     balances.set(shop.id, await getShopBalance(db, shop.id));
+    installedByShop.set(shop.id, await getInstalledMachineIds(db, shop.id));
   }
 
   const values = formOverride || {
@@ -93,10 +96,10 @@ export async function renderRecordForm(container, db, { recordId = null, date = 
   const manualChecked = record?.profit_is_manual === 1 || (formOverride && formOverride.manual_profit_amount !== "");
 
   const shopOptions = shops
-    .map(
-      (s) =>
-        `<option value="${s.id}" data-rate="${s.exchange_rate}" data-lending-rate="${s.lending_rate}" data-balance="${balances.get(s.id)}" ${String(s.id) === String(values.shop_id) ? "selected" : ""}>${escapeHtml(s.name)}</option>`
-    )
+    .map((s) => {
+      const installed = Array.from(installedByShop.get(s.id) || []).join(",");
+      return `<option value="${s.id}" data-rate="${s.exchange_rate}" data-lending-rate="${s.lending_rate}" data-balance="${balances.get(s.id)}" data-installed="${installed}" ${String(s.id) === String(values.shop_id) ? "selected" : ""}>${escapeHtml(s.name)}</option>`;
+    })
     .join("");
   const machineOptions = machines
     .map((m) => `<option value="${m.id}" ${String(m.id) === String(values.machine_id) ? "selected" : ""}>${escapeHtml(m.name)}</option>`)
@@ -176,6 +179,8 @@ export async function renderRecordForm(container, db, { recordId = null, date = 
 
   const $ = (id) => container.querySelector(`#${id}`);
   const shopSelect = $("f-shop-id");
+  const machineSelect = $("f-machine-id");
+  const initialMachineValue = String(values.machine_id || "");
   const cashInput = $("f-cash-investment");
   const usedInput = $("f-saved-ball-used");
   const payoutInput = $("f-payout-count");
@@ -191,6 +196,27 @@ export async function renderRecordForm(container, db, { recordId = null, date = 
 
   function currentShopOption() {
     return shopSelect.options[shopSelect.selectedIndex];
+  }
+
+  /**
+   * 選択中の店舗に設置機種が設定されていれば、機種セレクトの選択肢をそれだけに絞る。
+   * 設置機種が1つも設定されていない店舗（未設定）なら絞り込まない（全機種を表示）。
+   * 編集中の記録がもともと使っていた機種は、設置リストから外れていても表示し続ける。
+   */
+  function applyMachineFilter() {
+    const opt = currentShopOption();
+    const installedRaw = opt ? opt.dataset.installed || "" : "";
+    const installedIds = installedRaw ? new Set(installedRaw.split(",")) : null;
+    let visibleCount = 0;
+    for (const o of machineSelect.options) {
+      const show = !installedIds || installedIds.has(o.value) || o.value === initialMachineValue;
+      o.hidden = !show;
+      if (show) visibleCount += 1;
+    }
+    if (visibleCount === 0) {
+      // 想定外のデータ不整合時のフォールバック：何も選べなくなるくらいなら全部表示する
+      for (const o of machineSelect.options) o.hidden = false;
+    }
   }
 
   function updateBalanceHint() {
@@ -247,6 +273,7 @@ export async function renderRecordForm(container, db, { recordId = null, date = 
   shopSelect.addEventListener("change", () => {
     updatePreview();
     updateBalanceHint();
+    applyMachineFilter();
   });
 
   manualToggle.addEventListener("change", () => {
@@ -256,6 +283,7 @@ export async function renderRecordForm(container, db, { recordId = null, date = 
 
   updatePreview();
   updateBalanceHint();
+  applyMachineFilter();
 
   $("record-form").addEventListener("submit", async (e) => {
     e.preventDefault();

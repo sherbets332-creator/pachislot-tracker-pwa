@@ -5,19 +5,21 @@
  * （importはしない）。Node.jsでテストするときは、テストファイル側で
  * fake-indexeddb をグローバルに設定してからこのモジュールをimportすること。
  *
- * テーブル構成（4ストア。設計はFlask版schema.sqlを踏襲しつつ、
+ * テーブル構成（5ストア。設計はFlask版schema.sqlを踏襲しつつ、
  * record_realization_adjustments は保存せず savedBallRealization.js で
- * その場で導出する方針にしたため、5テーブル→4ストアに簡略化している）。
+ * その場で導出する方針にしたため、5テーブル→4ストアに簡略化している。
+ * shop_machines（店舗ごとの設置機種）はFlask版には無い、PWA版独自の追加ストア）。
  */
 
 export const DB_NAME = "pachislot-tracker";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const STORE_NAMES = Object.freeze({
   SHOPS: "shops",
   MACHINES: "machines",
   RECORDS: "records",
   SAVED_BALL_TRANSACTIONS: "saved_ball_transactions",
+  SHOP_MACHINES: "shop_machines",
 });
 
 /** DBを開く（初回はオブジェクトストア・インデックスを作成する）。 */
@@ -54,6 +56,14 @@ export function openDatabase() {
         });
         sbt.createIndex("shop_id", "shop_id");
         sbt.createIndex("record_id", "record_id");
+      }
+
+      // v2: 店舗ごとの設置機種（「この店舗に今ある機種だけ」に記録入力の選択肢を絞るため）。
+      if (!db.objectStoreNames.contains(STORE_NAMES.SHOP_MACHINES)) {
+        const shopMachines = db.createObjectStore(STORE_NAMES.SHOP_MACHINES, { keyPath: "id", autoIncrement: true });
+        shopMachines.createIndex("shop_id", "shop_id");
+        shopMachines.createIndex("machine_id", "machine_id");
+        shopMachines.createIndex("shop_machine", ["shop_id", "machine_id"], { unique: true });
       }
     };
 

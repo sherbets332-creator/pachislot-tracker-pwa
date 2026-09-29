@@ -24,7 +24,7 @@ import {
   toHalfWidth,
 } from "./logic/validation.js";
 
-const { SHOPS, MACHINES, RECORDS, SAVED_BALL_TRANSACTIONS } = STORE_NAMES;
+const { SHOPS, MACHINES, RECORDS, SAVED_BALL_TRANSACTIONS, SHOP_MACHINES } = STORE_NAMES;
 
 function nowIso() {
   return new Date().toISOString();
@@ -318,6 +318,7 @@ export async function deleteShop(db, shopId) {
   if (await shopHasHistory(db, shopId)) {
     throw new ValidationError("この店舗には記録・貯玉履歴があるため削除できません。アーカイブを使ってください。");
   }
+  await setInstalledMachines(db, shopId, []); // 設置機種のリンクも一緒に消す（孤立レコード防止）
   await remove(db, SHOPS, shopId);
 }
 
@@ -380,6 +381,45 @@ export async function getShopLedgerDetailed(db, shopId) {
     result.push({ ...tx, machine_name: machineName, record_play_date: recordPlayDate });
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// 店舗ごとの設置機種（shop_machines）
+// ---------------------------------------------------------------------------
+
+/**
+ * その店舗に設置されている機種を、名前順で返す。
+ * アーカイブ済みの機種でも、設置リストに残っていれば含める（勝手に消さない。
+ * 管理画面で外すかどうかは利用者が判断する）。
+ */
+export async function getInstalledMachines(db, shopId) {
+  const links = await getAllByIndex(db, SHOP_MACHINES, "shop_id", shopId);
+  const machines = [];
+  for (const link of links) {
+    const machine = await getById(db, MACHINES, link.machine_id);
+    if (machine) machines.push(machine);
+  }
+  return machines.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+}
+
+/** その店舗に設置されている機種のidの集合を返す（記録フォームの絞り込み判定などに使う）。 */
+export async function getInstalledMachineIds(db, shopId) {
+  const links = await getAllByIndex(db, SHOP_MACHINES, "shop_id", shopId);
+  return new Set(links.map((l) => l.machine_id));
+}
+
+/**
+ * その店舗の設置機種一覧を、渡された machineIds の集合に丸ごと置き換える
+ * （チェックボックスの一覧画面から、選ばれている分だけをまとめて保存する想定）。
+ */
+export async function setInstalledMachines(db, shopId, machineIds) {
+  const existing = await getAllByIndex(db, SHOP_MACHINES, "shop_id", shopId);
+  for (const link of existing) {
+    await remove(db, SHOP_MACHINES, link.id);
+  }
+  for (const machineId of machineIds) {
+    await add(db, SHOP_MACHINES, { shop_id: shopId, machine_id: machineId });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -561,6 +601,11 @@ export async function bulkCreateMachines(db, rawNames) {
 export async function deleteMachine(db, machineId) {
   if (await machineHasHistory(db, machineId)) {
     throw new ValidationError("この機種には記録があるため削除できません。アーカイブを使ってください。");
+  }
+  // どの店舗の設置リストに載っていても、機種自体が消えるならリンクも一緒に消す
+  const links = await getAllByIndex(db, SHOP_MACHINES, "machine_id", machineId);
+  for (const link of links) {
+    await remove(db, SHOP_MACHINES, link.id);
   }
   await remove(db, MACHINES, machineId);
 }

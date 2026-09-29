@@ -9,6 +9,7 @@ import { renderRecordForm } from "./views/recordFormView.js";
 import { renderShopsList } from "./views/shopsListView.js";
 import { renderShopForm } from "./views/shopFormView.js";
 import { renderShopDetail } from "./views/shopDetailView.js";
+import { renderShopMachines } from "./views/shopMachinesView.js";
 import { renderTransactionForm } from "./views/transactionFormView.js";
 import { renderMachinesList } from "./views/machinesListView.js";
 import { renderMachineForm } from "./views/machineFormView.js";
@@ -80,6 +81,10 @@ addRoute("/shops/:id/adjust", async (container, params) => {
 addRoute("/shops/:id/transactions/:txId/edit", async (container, params) => {
   const db = await dbPromise;
   await renderTransactionForm(container, db, { shopId: Number(params.id), txId: Number(params.txId) });
+});
+addRoute("/shops/:id/machines", async (container, params) => {
+  const db = await dbPromise;
+  await renderShopMachines(container, db, Number(params.id));
 });
 addRoute("/shops/:id", async (container, params) => {
   const db = await dbPromise;

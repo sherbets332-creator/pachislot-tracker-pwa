@@ -95,7 +95,10 @@ export async function renderShopDetail(container, db, shopId) {
     ${renderFlash()}
     <div class="calendar-header">
       <h1>${escapeHtml(shop.name)}</h1>
-      <a class="btn btn-sm" href="${buildUrl(`/shops/${shopId}/edit`)}">編集</a>
+      <div style="display:flex;gap:6px;">
+        <a class="btn btn-sm" href="${buildUrl(`/shops/${shopId}/machines`)}">設置機種</a>
+        <a class="btn btn-sm" href="${buildUrl(`/shops/${shopId}/edit`)}">編集</a>
+      </div>
     </div>
     <p class="muted">換金 ${shop.exchange_rate}円/枚 ／ 貸出（参考） ${shop.lending_rate}円/枚</p>
 
