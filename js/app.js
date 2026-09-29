@@ -14,6 +14,7 @@ import { renderMachinesList } from "./views/machinesListView.js";
 import { renderMachineForm } from "./views/machineFormView.js";
 import { renderReports } from "./views/reportsView.js";
 import { renderSettings } from "./views/settingsView.js";
+import { renderRecordsList } from "./views/recordsListView.js";
 
 const dbPromise = openDatabase();
 
@@ -50,6 +51,10 @@ addRoute("/records/:id/edit", async (container, params) => {
 addRoute("/records/day/:date", async (container, params) => {
   const db = await dbPromise;
   await renderRecordsDay(container, db, params.date);
+});
+addRoute("/records/list", async (container, params, query) => {
+  const db = await dbPromise;
+  await renderRecordsList(container, db, query);
 });
 
 addRoute("/shops", async (container, params, query) => {

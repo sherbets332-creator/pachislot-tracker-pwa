@@ -13,6 +13,7 @@ import {
 import { commas, profitClass, escapeHtml } from "../ui/format.js";
 import { renderBarChart, renderLineChart } from "../ui/simpleChart.js";
 import { renderFlash } from "../ui/flash.js";
+import { buildUrl } from "../router.js";
 
 function chartWrap(svg) {
   return `<div style="overflow-x:auto;"><div style="min-width:280px;">${svg}</div></div>`;
@@ -60,7 +61,7 @@ export async function renderReports(container, db) {
   const machineRows = byMachine.length
     ? byMachine
         .map(
-          (m) => `<tr><td>${escapeHtml(m.machineName)}</td><td>${m.playCount}</td><td>${commas(m.avgProfit)}円</td><td class="fw-bold ${profitClass(m.total)}">${commas(m.total)}円</td></tr>`
+          (m) => `<tr><td><a href="${buildUrl("/records/list", { machine_id: m.machineId })}">${escapeHtml(m.machineName)}</a></td><td>${m.playCount}</td><td>${commas(m.avgProfit)}円</td><td class="fw-bold ${profitClass(m.total)}">${commas(m.total)}円</td></tr>`
         )
         .join("")
     : `<tr><td colspan="4" class="muted">記録がありません。</td></tr>`;
@@ -69,7 +70,7 @@ export async function renderReports(container, db) {
     ? byShop
         .map(
           (s) => `<tr>
-            <td>${escapeHtml(s.shopName)}</td>
+            <td><a href="${buildUrl("/records/list", { shop_id: s.shopId })}">${escapeHtml(s.shopName)}</a></td>
             <td>${s.playCount}</td>
             <td class="fw-bold ${profitClass(s.total)}">${commas(s.total)}円</td>
             <td class="muted">${cashoutByShopName.has(s.shopName) ? `${commas(cashoutByShopName.get(s.shopName))}円` : ""}</td>
@@ -80,7 +81,10 @@ export async function renderReports(container, db) {
 
   container.innerHTML = `
     ${renderFlash()}
-    <h1>収支分析</h1>
+    <div class="calendar-header">
+      <h1>収支分析</h1>
+      <a class="btn btn-sm" href="${buildUrl("/records/list")}">🔍 記録を検索</a>
+    </div>
 
     <h2>収支推移（月別・累計）</h2>
     ${chartHtml}

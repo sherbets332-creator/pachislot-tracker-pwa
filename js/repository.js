@@ -230,6 +230,30 @@ export async function computeDisplayProfits(db, records) {
   return displayProfits;
 }
 
+/**
+ * 条件で絞り込んだ記録を、新しい日付順に返す（表示用収支つき）。
+ * @param {{shopId?: number|null, machineId?: number|null, dateFrom?: string|null, dateTo?: string|null}} filters
+ *   すべて省略可。dateFrom/dateToは "YYYY-MM-DD"（両端を含む）。
+ * @returns {Promise<Array>} 各要素に display_profit を追加した記録の配列
+ */
+export async function searchRecords(db, filters = {}) {
+  const { shopId = null, machineId = null, dateFrom = null, dateTo = null } = filters;
+
+  let records = await getAll(db, RECORDS);
+  if (shopId !== null) records = records.filter((r) => r.shop_id === shopId);
+  if (machineId !== null) records = records.filter((r) => r.machine_id === machineId);
+  if (dateFrom) records = records.filter((r) => r.play_date >= dateFrom);
+  if (dateTo) records = records.filter((r) => r.play_date <= dateTo);
+
+  records.sort((a, b) => {
+    if (a.play_date !== b.play_date) return a.play_date < b.play_date ? 1 : -1;
+    return b.id - a.id;
+  });
+
+  const displayProfits = await computeDisplayProfits(db, records);
+  return records.map((r) => ({ ...r, display_profit: displayProfits.get(r.id) ?? r.profit_amount }));
+}
+
 // ---------------------------------------------------------------------------
 // 店舗（shops）
 // ---------------------------------------------------------------------------
@@ -301,6 +325,16 @@ export async function listShops(db, { includeArchived = false } = {}) {
   const all = await getAll(db, SHOPS);
   const filtered = all.filter((s) => (includeArchived ? s.is_archived === 1 : s.is_archived !== 1));
   return filtered.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+}
+
+/**
+ * アーカイブ状態を問わず「全ての」店舗を名前順で返す（listShopsは一覧のアーカイブ切り替え用で
+ * アクティブ／アーカイブ済みのどちらか一方しか返さないため、記録検索の絞り込み選択肢など
+ * 「過去のものも含めて全部」欲しい場面ではこちらを使う）。
+ */
+export async function listAllShops(db) {
+  const all = await getAll(db, SHOPS);
+  return all.sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
 export async function getShop(db, shopId) {
@@ -535,6 +569,12 @@ export async function listMachines(db, { includeArchived = false } = {}) {
   const all = await getAll(db, MACHINES);
   const filtered = all.filter((m) => (includeArchived ? m.is_archived === 1 : m.is_archived !== 1));
   return filtered.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+}
+
+/** アーカイブ状態を問わず「全ての」機種を名前順で返す（listMachinesとの違いはlistAllShopsと同様）。 */
+export async function listAllMachines(db) {
+  const all = await getAll(db, MACHINES);
+  return all.sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
 export async function getMachine(db, machineId) {

@@ -40,7 +40,14 @@ iPhone(Safari)単体で完結させる版。サーバー不要、データはブ
   書き出し・読み込み（読み込みは全置き換え、要確認）。Flask版の`scripts/export_for_pwa.py`が
   同じ形式で書き出すので、そのままインポートできる。実際のFlask版本番DB（17記録・25取引）で
   往復させ、貯玉残高・全期間収支合計ともFlask版の実際の値と完全一致することを確認済み
-- ⬜ GitHubへのpush・GitHub Pagesでの公開：未着手（まだローカルのみ）
+- ✅ GitHubへのpush・GitHub Pagesでの公開：完了（Public、
+  https://github.com/sherbets332-creator/pachislot-tracker-pwa 、
+  https://sherbets332-creator.github.io/pachislot-tracker-pwa/ ）
+- ✅ 記録の検索・フィルター画面（`js/views/recordsListView.js`、`repository.searchRecords`）：
+  店舗・機種・期間で絞り込んで一覧表示。収支分析ページの機種別/店舗別の行からも
+  絞り込み済みの状態でここへ遷移できる
+- ✅ 貯玉使用のお得サマリー（店舗詳細ページ、Codexが実装）：貸出レート換算と換金レート換算の
+  差額から「貯玉N枚使ってX円得しました」を集計表示
 
 ## テストの実行方法
 
