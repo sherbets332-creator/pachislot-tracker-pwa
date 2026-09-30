@@ -30,7 +30,7 @@ export const BONUS_DIRECT_PROBABILITY = [1 / 21206.7, 1 / 15648.9, 1 / 13143.5, 
 /** 出玉率（機械割）の目安。 */
 export const PAYOUT_RATE = [0.979, 0.989, 1.010, 1.062, 1.111, 1.149];
 
-/** AT終了画面のスタンプ。到達したスタンプ以上で、その設定以上がほぼ濃厚とされる。 */
+/** ボーナス終了画面のスタンプ。到達したスタンプ以上で、その設定以上がほぼ濃厚とされる。 */
 export const ENDING_STAMPS = [
   { value: "none", label: "なし", minSetting: null },
   { value: "ka", label: "可", minSetting: 2 },
@@ -40,7 +40,7 @@ export const ENDING_STAMPS = [
   { value: "kiwami", label: "極", minSetting: 6 },
 ];
 
-/** AT終了画面の獲得枚数表示（「◯◯◯枚OVER」）。到達すればその設定以上が濃厚。 */
+/** 終了画面の獲得枚数表示（「◯◯◯枚OVER」）。到達すればその設定以上が濃厚。 */
 export const PAYOUT_OVER_HINTS = [
   { value: "none", label: "なし", minSetting: null },
   { value: "p222", label: "222枚OVER", minSetting: 2 },
@@ -93,6 +93,60 @@ export function summarizeMikoLog(mikoLog = []) {
   };
 }
 
+/**
+ * 遊技中に見かけたらチェックする設定示唆（出典: 1geki.jp、2026-09時点）。
+ * minSetting: 見えたら「設定◯以上濃厚」。parity: 奇数/偶数示唆（確定ではない）。
+ */
+export const SETTING_HINTS = [
+  { value: "voice_kansha", group: "エンディング・ゴエモンボイス", label: "感謝、感謝！", parity: "odd" },
+  { value: "voice_ayashii", group: "エンディング・ゴエモンボイス", label: "怪しい・・・！", parity: "even" },
+  { value: "voice_sankyu", group: "エンディング・ゴエモンボイス", label: "さんきゅ～！", minSetting: 2 },
+  { value: "voice_gokigen", group: "エンディング・ゴエモンボイス", label: "ご機嫌っしょ！", minSetting: 3 },
+  { value: "voice_semedoki", group: "エンディング・ゴエモンボイス", label: "攻めどきっしょ！", minSetting: 4 },
+  { value: "voice_ageage", group: "エンディング・ゴエモンボイス", label: "気分アゲアゲだし！", minSetting: 5 },
+  { value: "voice_goemon", group: "エンディング・ゴエモンボイス", label: "石川ゴエモン登場", minSetting: 6 },
+  { value: "at_end_gold", group: "AT終了画面", label: "乙女集合（金）", minSetting: 2 },
+  { value: "haruruna_push", group: "その他", label: "ハルルナPUSH出現", minSetting: 4 },
+  { value: "nagi_blue", group: "隠れ凪（推察）", label: "青文字", minSetting: 2 },
+  { value: "nagi_green", group: "隠れ凪（推察）", label: "緑文字", minSetting: 3 },
+  { value: "nagi_red", group: "隠れ凪（推察）", label: "赤文字", minSetting: 4 },
+  { value: "nagi_silver", group: "隠れ凪（推察）", label: "銀文字", minSetting: 5 },
+  { value: "nagi_gold", group: "隠れ凪（推察）", label: "金文字", minSetting: 6 },
+];
+
+/**
+ * 乙女ストラップモード。ノブナガ・ゴエモン・ヒデヨシは出現率に設定差あり（数値は非公開のため推定には使わず、
+ * 「出現するほど高設定期待」として回数を表示するだけ）。カンスケは乙女アタック当選率40.2%に優遇されるモード。
+ */
+export const STRAP_MODES = [
+  { key: "nobunaga", label: "ノブナガ", settingDiff: true },
+  { key: "goemon", label: "ゴエモン", settingDiff: true },
+  { key: "hideyoshi", label: "ヒデヨシ", settingDiff: true },
+  { key: "kansuke", label: "カンスケ", settingDiff: false },
+  { key: "mitsuhide", label: "ミツヒデ", settingDiff: false },
+  { key: "yoshiteru", label: "ヨシテル", settingDiff: false },
+];
+
+/** ストラップモードの出現回数を集計する。 */
+export function summarizeStraps(strapCounts = {}) {
+  const byKey = STRAP_MODES.map((m) => ({ ...m, count: Number(strapCounts[m.key]) || 0 }));
+  return {
+    byKey,
+    settingDiffCount: byKey.filter((m) => m.settingDiff).reduce((s, m) => s + m.count, 0),
+    totalCount: byKey.reduce((s, m) => s + m.count, 0),
+  };
+}
+
+/** チェックされた示唆から、「設定◯以上濃厚」の根拠一覧と奇数/偶数示唆を返す。 */
+export function summarizeHints(hintFlags = []) {
+  const seen = SETTING_HINTS.filter((h) => hintFlags.includes(h.value));
+  return {
+    minSettingSources: seen.filter((h) => h.minSetting).map((h) => ({ label: `${h.group}「${h.label}」`, minSetting: h.minSetting })),
+    oddCount: seen.filter((h) => h.parity === "odd").length,
+    evenCount: seen.filter((h) => h.parity === "even").length,
+  };
+}
+
 function findMinSetting(options, value) {
   const found = options.find((o) => o.value === value);
   return found ? found.minSetting : null;
@@ -114,23 +168,45 @@ export function buildEstimate(obs) {
   const czWinCount = mikoLog.length > 0 ? mikoSummary.winCount : Number(obs.cz_win_count) || 0;
   const periodSummary = summarizePeriodLog(Array.isArray(obs.period_log) ? obs.period_log : []);
 
+  // ボーナス直撃は空欄＝「数えていない」扱いで推定に使わない（0回として数えると低設定寄りに偏るため）。
+  const bonusRaw = obs.bonus_direct_count;
+  const bonusRecorded = bonusRaw !== null && bonusRaw !== undefined && String(bonusRaw).trim() !== "";
+  const bonusDirectCount = bonusRecorded ? Number(bonusRaw) || 0 : null;
+
   const samples = [
     { key: "at", label: "AT初当たり", k: atCount, n: gameCount, rates: AT_PROBABILITY },
     { key: "cz", label: "CZ（乙女アタック）当選", k: czWinCount, n: mikoReachCount, rates: CZ_WIN_RATE },
   ];
+  if (bonusRecorded) {
+    samples.push({ key: "bonus", label: "戦国乙女ボーナス直撃", k: bonusDirectCount, n: gameCount, rates: BONUS_DIRECT_PROBABILITY });
+  }
 
   const likelihoods = estimateSettingLikelihoods(samples);
 
+  const hintSummary = summarizeHints(Array.isArray(obs.hint_flags) ? obs.hint_flags : []);
+  const minSettingSources = [...hintSummary.minSettingSources];
   const stampMinSetting = findMinSetting(ENDING_STAMPS, obs.max_ending_stamp);
+  if (stampMinSetting) {
+    const s = ENDING_STAMPS.find((x) => x.value === obs.max_ending_stamp);
+    minSettingSources.push({ label: `終了画面スタンプ「${s.label}」`, minSetting: stampMinSetting });
+  }
   const payoutMinSetting = findMinSetting(PAYOUT_OVER_HINTS, obs.max_payout_over);
-  const hintMinSetting = Math.max(stampMinSetting || 0, payoutMinSetting || 0) || null;
+  if (payoutMinSetting) {
+    const p = PAYOUT_OVER_HINTS.find((x) => x.value === obs.max_payout_over);
+    minSettingSources.push({ label: `獲得枚数表示「${p.label}」`, minSetting: payoutMinSetting });
+  }
+  const hintMinSetting = Math.max(0, ...minSettingSources.map((s) => s.minSetting)) || null;
 
   return {
     settingLabels: SETTING_LABELS,
     likelihoods, // 長さ6、合計1
     observedAtRate: gameCount > 0 ? atCount / gameCount : null,
     observedCzRate: mikoReachCount > 0 ? czWinCount / mikoReachCount : null,
-    hintMinSetting, // スタンプ・枚数表示から言える「これ以上濃厚」の最低設定（無ければnull）
+    observedBonusRate: bonusRecorded && gameCount > 0 ? bonusDirectCount / gameCount : null,
+    hintMinSetting, // 示唆から言える「これ以上濃厚」の最低設定（無ければnull）
+    minSettingSources, // その根拠一覧 [{label, minSetting}]
+    parityHint: { odd: hintSummary.oddCount, even: hintSummary.evenCount },
+    strapSummary: summarizeStraps(obs.strap_counts || {}),
     samples,
     periodSummary,
     mikoSummary,

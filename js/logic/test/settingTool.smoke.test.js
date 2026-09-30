@@ -237,4 +237,36 @@ await test("観測記録フォーム: 巫女ポイント0メモから到達回�
   assert.equal(observations[0].cz_win_count, 0);
 });
 
+await test("観測記録フォーム: ストラップの＋−と示唆チェックが自動保存され、推定パネルに反映される", async (db, container) => {
+  const shopId = await createShop(db, { name: "店K", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector('.strap-plus[data-key="nobunaga"]').click();
+  await wait();
+  container.querySelector('.strap-plus[data-key="nobunaga"]').click();
+  await wait();
+  container.querySelector('.strap-minus[data-key="nobunaga"]').click();
+  await wait();
+  container.querySelector('.strap-plus[data-key="hideyoshi"]').click();
+  await wait();
+  assert.equal(container.querySelector("#strap-count-nobunaga").textContent, "1");
+
+  const cb = container.querySelector('.hint-flag[value="haruruna_push"]');
+  cb.checked = true;
+  fireEvent(cb, "change");
+  await wait();
+
+  const panel = container.querySelector("#estimate-panel").textContent;
+  assert.match(panel, /設定4以上が濃厚/);
+  assert.match(panel, /ハルルナPUSH/);
+  assert.match(panel, /出現：2回/);
+
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations.length, 1);
+  assert.deepEqual(observations[0].strap_counts, { nobunaga: 1, hideyoshi: 1 });
+  assert.deepEqual(observations[0].hint_flags, ["haruruna_push"]);
+  assert.equal(observations[0].bonus_direct_count, null, "ボーナス直撃は空欄のままならnull（数えていない）");
+});
+
 console.log(`\n${passCount} 件成功`);

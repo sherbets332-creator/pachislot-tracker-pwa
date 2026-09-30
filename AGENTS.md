@@ -34,7 +34,10 @@ mainブランチにpushすると自動で再デプロイされる。
   1つ追加し、`settingReference/index.js`の`REFERENCES`配列に登録するだけでよい設計にしている。
   各機種モジュールは`MACHINE_KEY`・`MACHINE_NAME`・`ENDING_STAMPS`・`PAYOUT_OVER_HINTS`・
   `buildEstimate(obs)`（同じ引数形・戻り値形）を持つ契約を守ること（`settingObservationFormView.js`が
-  この契約に依存している）。機種名は`getReferenceByMachineName`で**完全一致**判定なので、
+  この契約に依存している）。戦国乙女5では`summarizePeriodLog`・`summarizeMikoLog`（周期メモ・巫女メモ、
+  現状フォームは必須として呼んでいるので2機種目追加時は要対応）と、任意の`STRAP_MODES`・`SETTING_HINTS`
+  （無ければフォームはそのカードを出さない）も持っている。
+  機種名は`getReferenceByMachineName`で`MACHINE_NAME`または`MACHINE_ALIASES`との**完全一致**判定なので、
   対応機種は機種マスタにその名前どおりに登録してもらう必要がある
 
 ## 開発・テストの進め方

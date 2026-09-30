@@ -453,12 +453,29 @@ function normalizeMikoLog(log) {
   }));
 }
 
+/** 乙女ストラップ等の出現回数（{キー: 回数}）を保存用に正規化する。 */
+function normalizeStrapCounts(counts) {
+  const result = {};
+  if (counts && typeof counts === "object") {
+    for (const [key, value] of Object.entries(counts)) {
+      const n = toOptionalNonNegativeInt(value);
+      if (n) result[key] = n;
+    }
+  }
+  return result;
+}
+
 function buildSettingObservationFields(form) {
   const gameCount = parseIntField(form.game_count, "消化ゲーム数", { required: false, minimum: 0 });
   const atCount = parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
   const mikoReachCount = parseIntField(form.miko_reach_count, "巫女ポイント0到達回数", { required: false, minimum: 0 });
   const czWinCount = parseIntField(form.cz_win_count, "CZ当選回数", { required: false, minimum: 0 });
-  const bonusDirectCount = parseIntField(form.bonus_direct_count, "ボーナス直撃回数", { required: false, minimum: 0 });
+  // ボーナス直撃は空欄＝「数えていない」としてnullのまま保存する（推定に使わないため）。
+  const bonusRaw = form.bonus_direct_count;
+  const bonusDirectCount =
+    bonusRaw === null || bonusRaw === undefined || String(bonusRaw).trim() === ""
+      ? null
+      : parseIntField(String(bonusRaw), "ボーナス直撃回数", { required: false, minimum: 0 });
 
   if (atCount > gameCount) {
     throw new ValidationError("AT当選回数が消化ゲーム数を超えています。");
@@ -482,6 +499,8 @@ function buildSettingObservationFields(form) {
     max_payout_over: (form.max_payout_over ?? "none").toString(),
     period_log: normalizePeriodLog(form.period_log),
     miko_log: normalizeMikoLog(form.miko_log),
+    hint_flags: Array.isArray(form.hint_flags) ? form.hint_flags.map(String) : [],
+    strap_counts: normalizeStrapCounts(form.strap_counts),
     memo: (form.memo ?? "").toString().trim(),
   };
 }

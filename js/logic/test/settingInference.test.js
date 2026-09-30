@@ -160,6 +160,32 @@ test("summarizeMikoLog: カンスケ中は母数から除外する", () => {
   assert.equal(m.kansukeCount, 1);
 });
 
+test("buildEstimate: ボーナス直撃は空欄なら推定に使わず、入力すれば使う", () => {
+  const blank = buildEstimate({ game_count: 3000, at_count: 10, bonus_direct_count: "" });
+  assert.equal(blank.samples.some((s) => s.key === "bonus"), false);
+  assert.equal(blank.observedBonusRate, null);
+
+  const withBonus = buildEstimate({ game_count: 3000, at_count: 10, bonus_direct_count: "2" });
+  assert.equal(withBonus.samples.some((s) => s.key === "bonus"), true);
+  // 3000Gで直撃2回は高設定寄り → 設定6の尤度が設定1より高くなる
+  assert.ok(withBonus.likelihoods[5] > withBonus.likelihoods[0]);
+  // 直撃が無い場合と比べても設定6寄りに動く
+  assert.ok(withBonus.likelihoods[5] > blank.likelihoods[5]);
+});
+
+test("buildEstimate: 示唆チェックから「設定◯以上濃厚」と根拠、奇数/偶数示唆が出る", () => {
+  const e = buildEstimate({ hint_flags: ["voice_semedoki", "nagi_blue", "voice_kansha"], max_ending_stamp: "kichi" });
+  assert.equal(e.hintMinSetting, 4);
+  assert.equal(e.minSettingSources.length, 3); // ボイス・隠れ凪・スタンプ
+  assert.deepEqual(e.parityHint, { odd: 1, even: 0 });
+});
+
+test("buildEstimate: 設定差ありストラップ（ノブナガ・ゴエモン・ヒデヨシ）の出現回数を合計する", () => {
+  const e = buildEstimate({ strap_counts: { nobunaga: 2, goemon: 1, kansuke: 3 } });
+  assert.equal(e.strapSummary.settingDiffCount, 3);
+  assert.equal(e.strapSummary.totalCount, 6);
+});
+
 test("buildEstimate: 巫女メモがあれば手入力の回数よりメモの集計を使う", () => {
   const e = buildEstimate({
     game_count: 1000,

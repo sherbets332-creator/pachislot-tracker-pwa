@@ -57,8 +57,27 @@ function renderEstimatePanel(reference, estimate) {
       </div>
       ${bars}
       ${
+        estimate.observedBonusRate !== undefined && estimate.observedBonusRate !== null
+          ? `<div class="small muted" style="margin-top:4px;">ボーナス直撃実測：${estimate.observedBonusRate > 0 ? formatRateAsFraction(estimate.observedBonusRate) : "0回"}（推定に反映）</div>`
+          : ""
+      }
+      ${
         estimate.hintMinSetting
-          ? `<div class="alert" style="margin-top:8px;">終了画面の示唆から、設定${estimate.hintMinSetting}以上が濃厚です。</div>`
+          ? `<div class="alert" style="margin-top:8px;">設定${estimate.hintMinSetting}以上が濃厚です。
+               <div class="small">${(estimate.minSettingSources || [])
+                 .map((s) => `${escapeHtml(s.label)} → 設定${s.minSetting}以上`)
+                 .join("<br>")}</div></div>`
+          : ""
+      }
+      ${
+        estimate.parityHint && (estimate.parityHint.odd || estimate.parityHint.even)
+          ? `<div class="small" style="margin-top:6px;">ボイス示唆：奇数${estimate.parityHint.odd}／偶数${estimate.parityHint.even}（確定ではありません）</div>`
+          : ""
+      }
+      ${
+        estimate.strapSummary && estimate.strapSummary.totalCount > 0
+          ? `<div class="small" style="margin-top:6px;">設定差ありストラップ（ノブナガ・ゴエモン・ヒデヨシ）出現：<strong>${estimate.strapSummary.settingDiffCount}回</strong>
+               <span class="muted">（数値は非公開。多いほど高設定期待）</span></div>`
           : ""
       }
     </div>
@@ -156,20 +175,27 @@ export async function renderSettingObservationForm(
     machine_number: observation?.machine_number ?? "",
     game_count: observation?.game_count ?? 0,
     at_count: observation?.at_count ?? 0,
-    bonus_direct_count: observation?.bonus_direct_count ?? 0,
+    bonus_direct_count: observation?.bonus_direct_count ?? "", // 空欄＝数えていない（推定に使わない）
     miko_reach_count: observation?.miko_reach_count ?? 0,
     cz_win_count: observation?.cz_win_count ?? 0,
     max_ending_stamp: observation?.max_ending_stamp ?? "none",
     max_payout_over: observation?.max_payout_over ?? "none",
     period_log: observation?.period_log ?? [],
     miko_log: observation?.miko_log ?? [],
+    hint_flags: observation?.hint_flags ?? [],
+    strap_counts: observation?.strap_counts ?? {},
     memo: observation?.memo ?? "",
   };
-  // 周期メモ・巫女ポイント0メモは画面上で追記していくので、配列として手元に持つ。
+  // 周期メモ・巫女ポイント0メモ・示唆チェック・ストラップ回数は画面上で追記していくので、手元に持つ。
   const logs = {
     period_log: [...(values.period_log || [])],
     miko_log: [...(values.miko_log || [])],
+    hint_flags: [...(values.hint_flags || [])],
+    strap_counts: { ...(values.strap_counts || {}) },
   };
+  const strapModes = reference.STRAP_MODES || [];
+  const settingHints = reference.SETTING_HINTS || [];
+  const hintGroups = [...new Set(settingHints.map((h) => h.group))];
 
   const stampOptions = reference.ENDING_STAMPS.map(
     (s) => `<option value="${s.value}" ${s.value === values.max_ending_stamp ? "selected" : ""}>${escapeHtml(s.label)}</option>`
@@ -201,8 +227,9 @@ export async function renderSettingObservationForm(
         <div class="hint">戦国乙女ボーナス直撃・CZ勝利、どちらでのAT当選も合わせた回数。</div>
       </div>
       <div class="field">
-        <label>うち戦国乙女ボーナス直撃回数（任意・参考）</label>
-        <input type="number" id="f-bonus-direct-count" min="0" inputmode="numeric" value="${values.bonus_direct_count}">
+        <label>うち戦国乙女ボーナス直撃回数</label>
+        <input type="number" id="f-bonus-direct-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bonus_direct_count ?? ""}">
+        <div class="hint">設定1:1/21206.7〜設定6:1/5502.7と設定差が大きい要素。数えた日は0回でも「0」を入れると推定に反映されます（空欄なら使いません）。</div>
       </div>
       <div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
@@ -234,6 +261,51 @@ export async function renderSettingObservationForm(
         <div class="hint small muted">乙女アタック当選率の解析値はカンスケ滞在時を除いた数値のため、カンスケ中の分は判別から外します。</div>
         <div id="miko-log"></div>
       </div>
+
+      ${
+        strapModes.length
+          ? `<div class="card" id="strap-card">
+        <h2 style="margin-top:0;">乙女ストラップモード</h2>
+        <div class="hint small muted">★は設定差ありのキャラ（出現するほど高設定期待）。見えたら＋で数えます。</div>
+        ${strapModes
+          .map(
+            (m) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+            <div style="flex:1;">${m.settingDiff ? "★" : ""}${escapeHtml(m.label)}</div>
+            <button type="button" class="btn btn-sm strap-minus" data-key="${m.key}">−</button>
+            <div style="width:2em;text-align:center;" id="strap-count-${m.key}">${logs.strap_counts[m.key] || 0}</div>
+            <button type="button" class="btn btn-sm btn-primary strap-plus" data-key="${m.key}">＋</button>
+          </div>`
+          )
+          .join("")}
+      </div>`
+          : ""
+      }
+
+      ${
+        settingHints.length
+          ? `<div class="card" id="hint-card">
+        <h2 style="margin-top:0;">見えた設定示唆</h2>
+        ${hintGroups
+          .map(
+            (group) => `
+          <div class="small" style="margin-top:6px;font-weight:bold;">${escapeHtml(group)}</div>
+          ${settingHints
+            .filter((h) => h.group === group)
+            .map(
+              (h) => `
+            <label class="small" style="display:flex;align-items:center;gap:6px;margin:2px 0;">
+              <input type="checkbox" class="hint-flag" value="${h.value}" ${logs.hint_flags.includes(h.value) ? "checked" : ""}>
+              ${escapeHtml(h.label)}
+              <span class="muted">${h.minSetting ? `（設定${h.minSetting}${h.minSetting === 6 ? "" : "以上"}濃厚）` : h.parity === "odd" ? "（奇数示唆）" : "（偶数示唆）"}</span>
+            </label>`
+            )
+            .join("")}`
+          )
+          .join("")}
+      </div>`
+          : ""
+      }
       <div id="autosave-status" class="small muted"></div>
 
       <div class="field">
@@ -245,11 +317,11 @@ export async function renderSettingObservationForm(
         <input type="number" id="f-cz-win-count" min="0" inputmode="numeric" value="${values.cz_win_count}">
       </div>
       <div class="field">
-        <label>AT終了画面スタンプ、その日一番高かったもの</label>
+        <label>ボーナス終了画面スタンプ、その日一番高かったもの</label>
         <select id="f-max-ending-stamp">${stampOptions}</select>
       </div>
       <div class="field">
-        <label>AT終了画面の獲得枚数表示、その日一番高かったもの</label>
+        <label>終了画面の獲得枚数表示、その日一番高かったもの</label>
         <select id="f-max-payout-over">${payoutOptions}</select>
       </div>
       <div class="field">
@@ -353,6 +425,27 @@ export async function renderSettingObservationForm(
     await onLogChanged();
   }
   $("miko-win-btn").addEventListener("click", () => addMiko(true));
+
+  // 乙女ストラップ：＋/−で回数を数え、そのたびに自動保存。
+  async function changeStrap(key, delta) {
+    const next = Math.max(0, (logs.strap_counts[key] || 0) + delta);
+    if (next === 0) delete logs.strap_counts[key];
+    else logs.strap_counts[key] = next;
+    $(`strap-count-${key}`).textContent = String(next);
+    updateEstimate();
+    await autoSave();
+  }
+  container.querySelectorAll(".strap-plus").forEach((btn) => btn.addEventListener("click", () => changeStrap(btn.dataset.key, 1)));
+  container.querySelectorAll(".strap-minus").forEach((btn) => btn.addEventListener("click", () => changeStrap(btn.dataset.key, -1)));
+
+  // 設定示唆チェック：変えるたびに自動保存。
+  container.querySelectorAll(".hint-flag").forEach((cb) =>
+    cb.addEventListener("change", async () => {
+      logs.hint_flags = Array.from(container.querySelectorAll(".hint-flag:checked")).map((el) => el.value);
+      updateEstimate();
+      await autoSave();
+    })
+  );
   $("miko-lose-btn").addEventListener("click", () => addMiko(false));
 
   [
