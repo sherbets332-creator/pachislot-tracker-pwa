@@ -15,6 +15,8 @@ import {
 } from "../repository.js";
 import { getReferenceByMachineName } from "../logic/settingReference/index.js";
 import { summarizeEstimateHeadline } from "../logic/settingInference.js";
+import { fetchDwinData } from "../dwinImport.js";
+import { decodeQrFromImageFile } from "../ui/qrScan.js";
 import { escapeHtml, todayDateString } from "../ui/format.js";
 import { setFlash } from "../ui/flash.js";
 import { buildUrl, navigate } from "../router.js";
@@ -238,6 +240,26 @@ export async function renderSettingObservationForm(
     <h1>${escapeHtml(machine.name)}の観測記録${isEdit ? "編集" : "新規登録"}</h1>
     <p class="muted small">${escapeHtml(shop.name)}</p>
     <form id="observation-form">
+      <div class="card" id="dwin-card">
+        <h2 style="margin-top:0;">打-WINから読み込む（任意）</h2>
+        <div class="hint small muted">
+          平和の実機データ確認サービス「打-WIN LITE」のURLを貼るか、QRコードを撮影すると、
+          総ゲーム数・通常ゲーム数・終了画面スタンプを自動で反映します。それ以外の項目
+          （戦国乙女ボーナス回数など）は用語の意味が完全に一致するか確認できていないため、
+          参考表示するだけで自動入力はしません。
+        </div>
+        <div class="field" style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:10em;">
+            <label>打-WINのURL</label>
+            <input type="text" id="f-dwin-url" placeholder="https://dwlite.heiwa.jp/...">
+          </div>
+          <button type="button" class="btn" id="dwin-qr-btn">QRコードを撮影</button>
+          <input type="file" id="dwin-qr-file" accept="image/*" capture="environment" style="display:none;">
+          <button type="button" class="btn btn-primary" id="dwin-load-btn">読み込む</button>
+        </div>
+        <div id="dwin-status" class="small muted"></div>
+        <div id="dwin-reference"></div>
+      </div>
       <div class="field">
         <label>日付</label>
         <input type="date" id="f-play-date" required value="${values.play_date}">
@@ -505,6 +527,70 @@ export async function renderSettingObservationForm(
     })
   );
   $("miko-lose-btn").addEventListener("click", () => addMiko(false));
+
+  // 打-WINから読み込む：総ゲーム数・通常ゲーム数・終了画面スタンプだけ自動反映し、
+  // それ以外は「参考データ」として一覧表示するだけ（用語の意味が完全一致するか未確認なため）。
+  async function loadDwinData() {
+    const url = $("f-dwin-url").value.trim();
+    const status = $("dwin-status");
+    const refBox = $("dwin-reference");
+    refBox.innerHTML = "";
+    if (!url) {
+      status.textContent = "URLを入力してください。";
+      return;
+    }
+    status.textContent = "読み込み中...";
+    try {
+      const data = await fetchDwinData(url, reference);
+      const filled = [];
+      if (data.normalGameCount !== null) {
+        $("f-game-count").value = data.normalGameCount;
+        filled.push("通常ゲーム数");
+      }
+      if (data.totalGameCount !== null) {
+        $("f-total-game-count").value = data.totalGameCount;
+        filled.push("総ゲーム数");
+      }
+      if (data.maxEndingStamp) {
+        $("f-max-ending-stamp").value = data.maxEndingStamp;
+        filled.push("終了画面スタンプ");
+      }
+      ["f-game-count", "f-total-game-count", "f-max-ending-stamp"].forEach((id) => {
+        $(id).dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      status.textContent = filled.length
+        ? `反映しました：${filled.join("・")}`
+        : "読み込みましたが、反映できる項目が見つかりませんでした。";
+      if (data.referenceRows.length) {
+        refBox.innerHTML = `
+          <div class="small muted" style="margin-top:6px;">参考データ（自動反映はしていません。必要なら見て手入力してください）：</div>
+          <div class="small">${data.referenceRows.map((r) => `${escapeHtml(r.label)}：${escapeHtml(r.value)}`).join("<br>")}</div>
+        `;
+      }
+    } catch (err) {
+      status.textContent = `読み込めませんでした：${err.message}`;
+    }
+  }
+  $("dwin-load-btn").addEventListener("click", loadDwinData);
+  $("dwin-qr-btn").addEventListener("click", () => $("dwin-qr-file").click());
+  $("dwin-qr-file").addEventListener("change", async () => {
+    const file = $("dwin-qr-file").files[0];
+    $("dwin-qr-file").value = ""; // 同じ写真を選び直せるようにリセット
+    if (!file) return;
+    const status = $("dwin-status");
+    status.textContent = "QRコードを読み取り中...";
+    try {
+      const text = await decodeQrFromImageFile(file);
+      if (!text) {
+        status.textContent = "QRコードを読み取れませんでした。もう一度試してください。";
+        return;
+      }
+      $("f-dwin-url").value = text;
+      await loadDwinData();
+    } catch (err) {
+      status.textContent = `QRコードの読み取りに失敗しました：${err.message}`;
+    }
+  });
 
   [
     "f-game-count",

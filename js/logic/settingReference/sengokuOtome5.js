@@ -39,14 +39,20 @@ export const BONUS_DIRECT_PROBABILITY = [1 / 21206.7, 1 / 15648.9, 1 / 13143.5, 
 /** 出玉率（機械割）の目安。 */
 export const PAYOUT_RATE = [0.979, 0.989, 1.010, 1.062, 1.111, 1.149];
 
-/** ボーナス終了画面のスタンプ。到達したスタンプ以上で、その設定以上がほぼ濃厚とされる。 */
+/**
+ * ボーナス終了画面のスタンプ。到達したスタンプ以上で、その設定以上がほぼ濃厚とされる。
+ * dwinImageNamesは「打-WIN LITE」(dwlite.heiwa.jp)のスタンプ画像ファイル名（拡張子抜き）との
+ * 対応表（js/dwinImport.jsのmatchEndingStampFromImagesが使う）。可・吉・優は実際のページで
+ * 確認済み（サイト側は「吉」を"kiti"と表記）。良・極は良い（＝未達成）の実例が無く、
+ * ファイル名を確認できていないため、確認済みの自機種の値と同じ想定で推測を入れている（要検証）。
+ */
 export const ENDING_STAMPS = [
   { value: "none", label: "なし", minSetting: null },
-  { value: "ka", label: "可", minSetting: 2 },
-  { value: "kichi", label: "吉", minSetting: 3 },
-  { value: "ryo", label: "良", minSetting: 4 },
-  { value: "yu", label: "優", minSetting: 5 },
-  { value: "kiwami", label: "極", minSetting: 6 },
+  { value: "ka", label: "可", minSetting: 2, dwinImageNames: ["ka"] }, // 確認済み
+  { value: "kichi", label: "吉", minSetting: 3, dwinImageNames: ["kiti", "kichi"] }, // 確認済み（"kiti"表記）
+  { value: "ryo", label: "良", minSetting: 4, dwinImageNames: ["ryo", "ryou"] }, // 未確認（推測）
+  { value: "yu", label: "優", minSetting: 5, dwinImageNames: ["yu"] }, // 確認済み
+  { value: "kiwami", label: "極", minSetting: 6, dwinImageNames: ["kiwami"] }, // 未確認（推測）
 ];
 
 /** 終了画面の獲得枚数表示（「◯◯◯枚OVER」）。到達すればその設定以上が濃厚。 */

@@ -12,6 +12,7 @@ global.document = dom.window.document;
 global.HTMLElement = dom.window.HTMLElement;
 global.Event = dom.window.Event;
 global.sessionStorage = dom.window.sessionStorage;
+global.DOMParser = dom.window.DOMParser;
 dom.window.confirm = () => true;
 
 const { openDatabase, DB_NAME } = await import("../../db.js");
@@ -361,6 +362,60 @@ await test("観測記録フォーム: ストラップの＋−と示唆チェッ
   assert.deepEqual(observations[0].strap_counts, { nobunaga: 1, hideyoshi: 1 });
   assert.deepEqual(observations[0].hint_flags, ["haruruna_push"]);
   assert.equal(observations[0].bonus_direct_count, null, "ボーナス直撃は空欄のままならnull（数えていない）");
+});
+
+// ---------------------------------------------------------------------------
+const DWIN_SAMPLE_HTML = `<!doctype html><html><body>
+  <table class="table2"><tbody>
+    <tr><td>総ゲーム数</td><td>6,326 ゲーム</td></tr>
+    <tr><td>通常ゲーム数</td><td>3,290 ゲーム</td></tr>
+    <tr><td>戦国乙女ボーナス回数（確率）</td><td>1 回<br>1/3,290.0</td></tr>
+  </tbody></table>
+  <div class="stamp_wrapa"><div class="stamp_wrapa_item"><img class="stamp_wrapa_item_img" src="https://dwlite.heiwa.jp/img/yu.png" /></div></div>
+</body></html>`;
+
+await test("観測記録フォーム: 打-WINのURLを読み込むと通常ゲーム数・総ゲーム数・終了画面スタンプが反映される", async (db, container) => {
+  const shopId = await createShop(db, { name: "店O", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => DWIN_SAMPLE_HTML });
+  try {
+    container.querySelector("#f-dwin-url").value = "https://dwlite.heiwa.jp/ps/dummy";
+    container.querySelector("#dwin-load-btn").click();
+    await wait();
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.equal(container.querySelector("#f-game-count").value, "3290");
+  assert.equal(container.querySelector("#f-total-game-count").value, "6326");
+  assert.equal(container.querySelector("#f-max-ending-stamp").value, "yu");
+  assert.match(container.querySelector("#dwin-status").textContent, /反映しました/);
+  assert.match(container.querySelector("#dwin-reference").textContent, /戦国乙女ボーナス回数/);
+  // 推定パネルも読み込んだ通常ゲーム数を反映して更新されているはず。
+  assert.doesNotMatch(container.querySelector("#estimate-panel").textContent, /AT初当たり実測：データ無し/);
+});
+
+await test("観測記録フォーム: 打-WINの読み込みに失敗するとエラーメッセージが出る", async (db, container) => {
+  const shopId = await createShop(db, { name: "店P", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: false, status: 404 });
+  try {
+    container.querySelector("#f-dwin-url").value = "https://dwlite.heiwa.jp/ps/invalid";
+    container.querySelector("#dwin-load-btn").click();
+    await wait();
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.match(container.querySelector("#dwin-status").textContent, /読み込めませんでした/);
 });
 
 console.log(`\n${passCount} 件成功`);

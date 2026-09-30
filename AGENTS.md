@@ -56,6 +56,19 @@ mainブランチにpushすると自動で再デプロイされる。
   移行率・引き戻しモードの当選率は、複数の解析サイトを調べても設定2〜6の具体的な数値が見つからな
   かったため未実装（引き戻し当選率は実質的に`summarizePeriodLog`の1周期目当選率と同じ意味なので、
   既存の周期メモ機能で代替できている）。新しい根拠のある数値が見つかったら追加を検討すること
+- **メーカー公式データ連携（打-WIN LITE, `js/dwinImport.js`）は「名前が似ているだけの別統計」を
+  混ぜないよう慎重に扱うこと**。dwlite.heiwa.jpのページはCORS許可済み（`Access-Control-Allow-Origin: *`、
+  2026-09確認）でブラウザから直接fetchできるが、自動反映しているのは意味が完全に一致すると確認できた
+  「総ゲーム数」「通常ゲーム数」「終了画面スタンプ」の3つだけ。「戦国乙女ボーナス回数」
+  「(プレミアム)乙女アタック回数」等は、確率の桁が理論値と合わない（母数や定義が違う別統計の可能性が
+  高い）ため、`referenceRows`として画面に参考表示するだけに留めている。新しい項目を自動反映に
+  追加する前に、必ず理論値（`AT_PROBABILITY`等）と桁が合うか検算すること。スタンプ画像ファイル名
+  （`ENDING_STAMPS`の`dwinImageNames`）は「可(ka)」「吉(kiti)」「優(yu)」のみ実例で確認済みで、
+  「良」「極」は未確認の推測（コメント参照）
+- QRコード読み取り(`js/ui/qrScan.js`)は`js/vendor/jsQR.js`（Apache-2.0、vendored）を使う。250KB程度と
+  重いので、アプリ起動時には読み込まず、実際にQR読み取りボタンを押した時だけ動的に`<script>`タグで
+  読み込む（`ensureJsQRLoaded`）。新しい外部ライブラリを同梱する場合も`js/vendor/`に置き、
+  同様に使う時だけ遅延読み込みすること（CDN不使用の方針は崩さない）
 - **新しいIndexedDBストアを追加したら、`js/dataTransfer.js`の`STORE_ORDER`にも必ず追加すること**。
   ここに入っていないストアはエクスポート/インポート（バックアップ）の対象から漏れる。過去に
   `shop_machines`・`setting_observations`を追加した際にこの追加を忘れており、ユーザーが「バックアップ
@@ -99,7 +112,9 @@ js/views/           画面ごとのレンダリング関数
 js/router.js        ハッシュルーター
 js/app.js           ルート定義・DB初期化・Service Worker登録
 js/dataTransfer.js  エクスポート/インポート
-js/ui/              フォーマット・フラッシュメッセージ・SVGチャート
+js/dwinImport.js    「打-WIN LITE」(dwlite.heiwa.jp、メーカー公式の実機データ確認サービス)のページ解析
+js/ui/              フォーマット・フラッシュメッセージ・SVGチャート・QR読み取り(qrScan.js)
+js/vendor/          外部ライブラリの同梱コピー（CDN不使用の方針のため。現状jsQRのみ）
 sw.js, manifest.json, icons/   PWA対応（オフライン・ホーム画面追加）
 scripts/            開発用スクリプト（generate_icons.py, extract-node-modules.js, scrape_pworld.js）
 ```
