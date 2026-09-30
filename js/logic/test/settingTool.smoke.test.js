@@ -71,18 +71,18 @@ await test("設定判別ツール: 対応機種が無ければ案内メッセー
 await test("設定判別ツール: 対応機種（戦国乙女5）だけが機種セレクトに出る", async (db, container) => {
   await createShop(db, { name: "店B", exchange_rate: "20", lending_rate: "20" });
   await createMachine(db, { name: "北斗の拳" });
-  await createMachine(db, { name: "戦国乙女5" });
+  await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingTool(container, db, new URLSearchParams(""));
   const machineSelect = container.querySelector("#f-machine-id");
   const optionTexts = Array.from(machineSelect.options).map((o) => o.textContent);
-  assert.ok(optionTexts.includes("戦国乙女5"));
+  assert.ok(optionTexts.includes("L戦国乙女5 業火を穿つ宿焔の双刃"));
   assert.ok(!optionTexts.includes("北斗の拳"));
 });
 
 await test("設定判別ツール: 店舗・機種を選ぶと記録一覧（空）と新規登録リンクが出る", async (db, container) => {
   const shopId = await createShop(db, { name: "店C", exchange_rate: "20", lending_rate: "20" });
-  const machineId = await createMachine(db, { name: "戦国乙女5" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingTool(container, db, new URLSearchParams(`shop_id=${shopId}&machine_id=${machineId}`));
   assert.match(container.textContent, /まだこの店舗・機種の記録はありません/);
@@ -92,7 +92,7 @@ await test("設定判別ツール: 店舗・機種を選ぶと記録一覧（空
 // ---------------------------------------------------------------------------
 await test("観測記録フォーム: 新規登録すると保存され、一覧に反映される", async (db, container) => {
   const shopId = await createShop(db, { name: "店D", exchange_rate: "20", lending_rate: "20" });
-  const machineId = await createMachine(db, { name: "戦国乙女5" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingObservationForm(container, db, { shopId, machineId });
   container.querySelector("#f-play-date").value = "2026-09-30";
@@ -112,7 +112,7 @@ await test("観測記録フォーム: 新規登録すると保存され、一覧
 
 await test("観測記録フォーム: 入力すると推定パネルがその場で更新される", async (db, container) => {
   const shopId = await createShop(db, { name: "店E", exchange_rate: "20", lending_rate: "20" });
-  const machineId = await createMachine(db, { name: "戦国乙女5" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingObservationForm(container, db, { shopId, machineId });
   const panel = container.querySelector("#estimate-panel");
@@ -129,7 +129,7 @@ await test("観測記録フォーム: 入力すると推定パネルがその場
 
 await test("観測記録フォーム: 終了画面スタンプで「極」を選ぶと設定6濃厚の示唆が出る", async (db, container) => {
   const shopId = await createShop(db, { name: "店F", exchange_rate: "20", lending_rate: "20" });
-  const machineId = await createMachine(db, { name: "戦国乙女5" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingObservationForm(container, db, { shopId, machineId });
   container.querySelector("#f-max-ending-stamp").value = "kiwami";
@@ -140,7 +140,7 @@ await test("観測記録フォーム: 終了画面スタンプで「極」を選
 
 await test("観測記録フォーム: 編集・削除ができる", async (db, container) => {
   const shopId = await createShop(db, { name: "店G", exchange_rate: "20", lending_rate: "20" });
-  const machineId = await createMachine(db, { name: "戦国乙女5" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingObservationForm(container, db, { shopId, machineId });
   container.querySelector("#f-play-date").value = "2026-09-30";
@@ -171,7 +171,7 @@ await test("観測記録フォーム: 編集・削除ができる", async (db, c
 
 await test("観測記録フォーム: AT当選回数が消化ゲーム数を超えるとエラーになる", async (db, container) => {
   const shopId = await createShop(db, { name: "店H", exchange_rate: "20", lending_rate: "20" });
-  const machineId = await createMachine(db, { name: "戦国乙女5" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
   await renderSettingObservationForm(container, db, { shopId, machineId });
   container.querySelector("#f-game-count").value = "10";

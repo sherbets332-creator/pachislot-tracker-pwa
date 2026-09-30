@@ -13,7 +13,7 @@ export async function renderSettings(container, db) {
     <div class="card">
       <h2 style="margin-top:0;">設定判別ツール</h2>
       <p class="small muted">
-        対応機種（現在は戦国乙女5のみ）で、遊技中に数えたデータから設定の目安を参考表示します。
+        対応機種（現在は「L戦国乙女5 業火を穿つ宿焔の双刃」のみ）で、遊技中に数えたデータから設定の目安を参考表示します。
       </p>
       <a class="btn btn-primary btn-block" href="${buildUrl("/setting-tool")}">設定判別ツールを開く</a>
     </div>

@@ -99,7 +99,13 @@ test("buildEstimate（戦国乙女5）: スタンプと枚数表示、より高�
 });
 
 // ---------------------------------------------------------------------------
-test("getReferenceByMachineName: 「戦国乙女5」で見つかる", () => {
+test("getReferenceByMachineName: 正式名「L戦国乙女5 業火を穿つ宿焔の双刃」で見つかる", () => {
+  const ref = getReferenceByMachineName("L戦国乙女5 業火を穿つ宿焔の双刃");
+  assert.ok(ref);
+  assert.equal(ref.MACHINE_KEY, "sengoku_otome5");
+});
+
+test("getReferenceByMachineName: 旧名「戦国乙女5」（別名）でも見つかる", () => {
   const ref = getReferenceByMachineName("戦国乙女5");
   assert.ok(ref);
   assert.equal(ref.MACHINE_KEY, "sengoku_otome5");
@@ -112,7 +118,7 @@ test("getReferenceByMachineName: 未対応機種はnull", () => {
 test("getReferenceByKey: キーからも見つかる", () => {
   const ref = getReferenceByKey("sengoku_otome5");
   assert.ok(ref);
-  assert.equal(ref.MACHINE_NAME, "戦国乙女5");
+  assert.equal(ref.MACHINE_NAME, "L戦国乙女5 業火を穿つ宿焔の双刃");
 });
 
 console.log(`\n${passCount} 件成功`);

@@ -11,7 +11,9 @@
 import { estimateSettingLikelihoods } from "../settingInference.js";
 
 export const MACHINE_KEY = "sengoku_otome5";
-export const MACHINE_NAME = "戦国乙女5";
+export const MACHINE_NAME = "L戦国乙女5 業火を穿つ宿焔の双刃";
+/** 以前の短い名前で機種マスタに登録済みの場合も対応機種として扱うための別名。 */
+export const MACHINE_ALIASES = ["戦国乙女5"];
 
 /** 設定1〜6の順（インデックス0=設定1）。 */
 export const SETTING_LABELS = ["設定1", "設定2", "設定3", "設定4", "設定5", "設定6"];

@@ -9,9 +9,13 @@ import * as sengokuOtome5 from "./sengokuOtome5.js";
 /** 対応している設定判別リファレンスの一覧。 */
 export const REFERENCES = [sengokuOtome5];
 
-/** 機種名（完全一致）から対応リファレンスを探す。無ければnull。 */
+/** 機種名（MACHINE_NAME または MACHINE_ALIASES と完全一致）から対応リファレンスを探す。無ければnull。 */
 export function getReferenceByMachineName(machineName) {
-  return REFERENCES.find((ref) => ref.MACHINE_NAME === machineName) || null;
+  return (
+    REFERENCES.find(
+      (ref) => ref.MACHINE_NAME === machineName || (ref.MACHINE_ALIASES || []).includes(machineName)
+    ) || null
+  );
 }
 
 /** 機種キーから対応リファレンスを探す。無ければnull。 */
