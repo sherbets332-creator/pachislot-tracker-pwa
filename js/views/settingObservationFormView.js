@@ -14,6 +14,7 @@ import {
   ValidationError,
 } from "../repository.js";
 import { getReferenceByMachineName } from "../logic/settingReference/index.js";
+import { summarizeEstimateHeadline } from "../logic/settingInference.js";
 import { escapeHtml, todayDateString } from "../ui/format.js";
 import { setFlash } from "../ui/flash.js";
 import { buildUrl, navigate } from "../router.js";
@@ -29,6 +30,7 @@ function formatRateAsFraction(value) {
 }
 
 function renderEstimatePanel(reference, estimate) {
+  const headline = summarizeEstimateHeadline(estimate);
   const bars = estimate.settingLabels
     .map((label, i) => {
       const pct = estimate.likelihoods[i] * 100;
@@ -50,6 +52,11 @@ function renderEstimatePanel(reference, estimate) {
         AT初当たり確率とCZ当選率の理論値に対して、入力した実測値がどれくらい起こりやすいかを
         設定1〜6で相対比較しただけの簡易的な目安です。断定はできません。
       </p>
+      ${
+        headline
+          ? `<div class="alert" style="margin-bottom:8px;"><strong>${escapeHtml(headline)}</strong></div>`
+          : `<div class="small muted" style="margin-bottom:8px;">まだ判断材料がありません。</div>`
+      }
       <div class="small" style="margin-bottom:8px;">
         AT初当たり実測：${estimate.observedAtRate !== null ? `${formatRateAsFraction(estimate.observedAtRate)}（${formatPercent(estimate.observedAtRate, 2)}）` : "データ無し"}
         ／

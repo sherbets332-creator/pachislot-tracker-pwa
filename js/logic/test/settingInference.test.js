@@ -4,7 +4,7 @@
  * 実行: node js/logic/test/settingInference.test.js
  */
 import assert from "node:assert/strict";
-import { estimateSettingLikelihoods } from "../settingInference.js";
+import { estimateSettingLikelihoods, summarizeEstimateHeadline } from "../settingInference.js";
 import {
   buildEstimate,
   AT_PROBABILITY,
@@ -171,6 +171,23 @@ test("summarizeMikoLog: 総G数が空欄の回は間隔計算から除外し、1
     { total_game: 900, won: true, kansuke: false },
   ]);
   assert.equal(withBlank.averageInterval, 600); // 総G数ありの回（300→900）だけを見る
+});
+
+test("summarizeEstimateHeadline: データが無ければnull", () => {
+  const e = buildEstimate({});
+  assert.equal(summarizeEstimateHeadline(e), null);
+});
+
+test("summarizeEstimateHeadline: hintMinSettingがあればそれを優先して一言にする", () => {
+  const e = buildEstimate({ max_ending_stamp: "kiwami", game_count: 1000, at_count: 1 });
+  assert.equal(summarizeEstimateHeadline(e), "設定6以上濃厚");
+});
+
+test("summarizeEstimateHeadline: データがあれば最尤設定と割合を一言にする", () => {
+  // 設定6のAT初当たり確率そのままの実測 → 設定6寄りになるはず
+  const e = buildEstimate({ game_count: 10000, at_count: Math.round(10000 / 262.9) });
+  const headline = summarizeEstimateHeadline(e);
+  assert.match(headline, /設定6寄り（\d+%）/);
 });
 
 test("buildEstimate: 総ゲーム数は参考値として通すだけで、推定には使わない", () => {

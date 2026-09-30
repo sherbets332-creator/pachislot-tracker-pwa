@@ -136,6 +136,21 @@ await test("観測記録フォーム: 終了画面スタンプで「極」を選
   fireEvent(container.querySelector("#f-max-ending-stamp"), "change");
 
   assert.match(container.querySelector("#estimate-panel").textContent, /設定6以上が濃厚/);
+  assert.match(container.querySelector("#estimate-panel").textContent, /設定6以上濃厚/); // 追加した総合サマリー行
+});
+
+await test("設定判別ツール: 記録一覧に簡易推定の一言サマリーが出る", async (db, container) => {
+  const shopId = await createShop(db, { name: "店M", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-max-ending-stamp").value = "kiwami";
+  fireEvent(container.querySelector("#f-max-ending-stamp"), "change");
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+
+  await renderSettingTool(container, db, new URLSearchParams(`shop_id=${shopId}&machine_id=${machineId}`));
+  assert.match(container.textContent, /設定6以上濃厚/);
 });
 
 await test("観測記録フォーム: 編集・削除ができる", async (db, container) => {

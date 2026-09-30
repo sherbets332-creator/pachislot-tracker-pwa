@@ -4,6 +4,7 @@
  */
 import { listAllShops, listAllMachines, listSettingObservations } from "../repository.js";
 import { getReferenceByMachineName, REFERENCES } from "../logic/settingReference/index.js";
+import { summarizeEstimateHeadline } from "../logic/settingInference.js";
 import { commas, escapeHtml } from "../ui/format.js";
 import { buildUrl, navigate } from "../router.js";
 import { renderFlash } from "../ui/flash.js";
@@ -43,16 +44,18 @@ export async function renderSettingTool(container, db, query) {
       const observations = await listSettingObservations(db, { shopId, machineId });
       const listHtml = observations.length
         ? `<div class="list">${observations
-            .map(
-              (o) => `
+            .map((o) => {
+              const headline = summarizeEstimateHeadline(reference.buildEstimate(o));
+              return `
             <a class="list-item" href="${buildUrl(`/setting-tool/${o.id}/edit`)}" style="text-decoration:none;color:inherit;display:block;">
               <div class="fw-bold">${o.play_date}${o.machine_number ? `（台番 ${escapeHtml(o.machine_number)}）` : ""}</div>
               <div class="small muted">
                 G数${commas(o.game_count)} ／ AT ${o.at_count}回 ／ CZ ${o.cz_win_count}回
                 ${o.max_ending_stamp && o.max_ending_stamp !== "none" ? ` ／ 終了画面示唆あり` : ""}
               </div>
-            </a>`
-            )
+              ${headline ? `<div class="small" style="margin-top:2px;"><strong>${escapeHtml(headline)}</strong></div>` : ""}
+            </a>`;
+            })
             .join("")}</div>`
         : `<p class="muted">まだこの店舗・機種の記録はありません。</p>`;
 

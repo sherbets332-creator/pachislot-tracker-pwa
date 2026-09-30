@@ -45,6 +45,15 @@ mainブランチにpushすると自動で再デプロイされる。
   `{ display_game: null, hit: true, via: "miko", linked_miko_id: <対応するmiko_logエントリのid> }`
   を追加する（AT初当たりで次周期は1周期目からになるため）。削除・取消時はこのリンクを辿って
   両方の配列を連動して消す（`settingObservationFormView.js`のmiko-del／period-undo-btn参照）
+- `js/logic/settingInference.js`の`summarizeEstimateHeadline(estimate)`は、`buildEstimate(obs)`の
+  戻り値（`settingLabels`・`likelihoods`・`hintMinSetting`・`samples`という契約上必ずある項目だけを見る）
+  から「設定6以上濃厚」「設定5寄り（42%）」のような一言サマリーを作る、機種非依存の共通関数。
+  新しい機種を追加しても書き直す必要はなく、一覧画面（`settingToolView.js`）・観測記録フォームの
+  推定パネル（`settingObservationFormView.js`）の両方がこれを使っている
+- **新しいIndexedDBストアを追加したら、`js/dataTransfer.js`の`STORE_ORDER`にも必ず追加すること**。
+  ここに入っていないストアはエクスポート/インポート（バックアップ）の対象から漏れる。過去に
+  `shop_machines`・`setting_observations`を追加した際にこの追加を忘れており、ユーザーが「バックアップ
+  を取っておけば安心」と案内された後に発覚するインシデントがあった
 
 ## 開発・テストの進め方
 

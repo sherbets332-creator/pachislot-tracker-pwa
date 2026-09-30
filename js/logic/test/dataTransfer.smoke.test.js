@@ -21,7 +21,17 @@ dom.window.URL.createObjectURL = () => "blob:mock-url";
 dom.window.URL.revokeObjectURL = () => {};
 
 const { openDatabase, DB_NAME, getAll, STORE_NAMES } = await import("../../db.js");
-const { createShop, createMachine, createRecord, createCashout, getShopBalance } = await import("../../repository.js");
+const {
+  createShop,
+  createMachine,
+  createRecord,
+  createCashout,
+  getShopBalance,
+  setInstalledMachines,
+  getInstalledMachineIds,
+  createSettingObservation,
+  listSettingObservations,
+} = await import("../../repository.js");
 const { exportAllData, importAllData, ImportError } = await import("../../dataTransfer.js");
 const { renderSettings } = await import("../../views/settingsView.js");
 
@@ -89,6 +99,33 @@ await test("エクスポート→別DBへインポートで完全に復元でき
 
   // 残高計算も正しく引き継がれているはず（1000獲得-500換金=500）
   assert.equal(await getShopBalance(db, shopId), 500);
+});
+
+await test("エクスポート/インポートに設置機種（shop_machines）と設定判別の観測記録（setting_observations）も含まれる", async (db) => {
+  const shopId = await createShop(db, { name: "テスト店2", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await setInstalledMachines(db, shopId, [machineId]);
+  const observationId = await createSettingObservation(db, {
+    shop_id: shopId,
+    machine_id: machineId,
+    machine_key: "sengoku_otome5",
+    play_date: "2026-09-30",
+    game_count: "1000",
+    at_count: "3",
+  });
+
+  const exported = await exportAllData(db);
+  assert.equal(exported.shop_machines.length, 1);
+  assert.equal(exported.setting_observations.length, 1);
+
+  await importAllData(db, exported);
+
+  const installedIds = await getInstalledMachineIds(db, shopId);
+  assert.ok(installedIds.has(machineId));
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].id, observationId);
+  assert.equal(observations[0].game_count, 1000);
 });
 
 await test("インポート後も新規作成でid衝突しない（自動採番カウンタが引き継がれる）", async (db) => {

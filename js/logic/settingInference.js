@@ -46,3 +46,33 @@ export function estimateSettingLikelihoods(samples) {
   const total = weights.reduce((a, b) => a + b, 0);
   return weights.map((w) => w / total);
 }
+
+/**
+ * buildEstimate()の結果から、一覧画面や推定パネル上部に出す「一言サマリー」を作る。
+ * 機種ごとのbuildEstimate実装が共通で持つ settingLabels／likelihoods／hintMinSetting／samples
+ * （AGENTS.mdの契約）だけを見る機種非依存のロジックなので、新しい機種を追加してもそのまま使い回せる。
+ *
+ * @param {{settingLabels?: string[], likelihoods?: number[], hintMinSetting?: number|null,
+ *           samples?: {n: number}[]}} estimate
+ * @returns {string|null} 表示する一言。まだ判断材料が無ければnull。
+ */
+export function summarizeEstimateHeadline(estimate) {
+  if (!estimate) return null;
+  // 示唆から「設定◯以上濃厚」と言えるなら、それが一番はっきりした根拠なので優先する。
+  if (estimate.hintMinSetting) {
+    return `設定${estimate.hintMinSetting}以上濃厚`;
+  }
+  const hasData = Array.isArray(estimate.samples) && estimate.samples.some((s) => s && s.n > 0);
+  if (!hasData) return null;
+
+  const likelihoods = estimate.likelihoods || [];
+  if (likelihoods.length === 0) return null;
+  let maxIndex = 0;
+  for (let i = 1; i < likelihoods.length; i += 1) {
+    if (likelihoods[i] > likelihoods[maxIndex]) maxIndex = i;
+  }
+  const label = (estimate.settingLabels || [])[maxIndex];
+  if (!label) return null;
+  const pct = Math.round((likelihoods[maxIndex] || 0) * 100);
+  return `${label}寄り（${pct}%）`;
+}
