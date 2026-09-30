@@ -184,4 +184,57 @@ await test("観測記録フォーム: AT当選回数が消化ゲーム数を超�
   assert.equal(observations.length, 0);
 });
 
+await test("観測記録フォーム: 周期メモを追加すると自動保存され、何周期目で当たったか表示される", async (db, container) => {
+  const shopId = await createShop(db, { name: "店I", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-period-game").value = "100";
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  container.querySelector("#f-period-game").value = "50";
+  container.querySelector("#period-hit-btn").click();
+  await wait();
+
+  assert.match(container.querySelector("#period-log").textContent, /初当たり1回目：2周期目/);
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations.length, 1, "新規でも1件目の追加で自動作成され、2件目以降は同じ記録を更新する");
+  assert.deepEqual(observations[0].period_log, [
+    { display_game: 100, hit: false },
+    { display_game: 50, hit: true },
+  ]);
+});
+
+await test("観測記録フォーム: 巫女ポイント0メモから到達回数・CZ当選回数が自動集計される（カンスケ中は除外）", async (db, container) => {
+  const shopId = await createShop(db, { name: "店J", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-miko-total-game").value = "320";
+  container.querySelector("#miko-win-btn").click();
+  await wait();
+  container.querySelector("#f-miko-total-game").value = "780";
+  container.querySelector("#miko-lose-btn").click();
+  await wait();
+  container.querySelector("#f-miko-total-game").value = "1100";
+  container.querySelector("#f-miko-kansuke").checked = true;
+  container.querySelector("#miko-win-btn").click();
+  await wait();
+
+  assert.equal(container.querySelector("#f-miko-reach-count").value, "2");
+  assert.equal(container.querySelector("#f-cz-win-count").value, "1");
+  assert.equal(container.querySelector("#f-miko-reach-count").readOnly, true);
+
+  let observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].miko_log.length, 3);
+  assert.equal(observations[0].miko_reach_count, 2);
+
+  // ×で1件削除 → 自動保存
+  container.querySelector('.miko-del[data-index="0"]').click();
+  await wait();
+  observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].miko_log.length, 2);
+  assert.equal(observations[0].cz_win_count, 0);
+});
+
 console.log(`\n${passCount} 件成功`);

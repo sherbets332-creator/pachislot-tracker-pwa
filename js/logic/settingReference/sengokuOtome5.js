@@ -50,6 +50,49 @@ export const PAYOUT_OVER_HINTS = [
   { value: "p666", label: "666枚OVER", minSetting: 6 },
 ];
 
+/**
+ * 周期ごとのAT期待度（設定1、解析サイト公表値）。インデックス0=1周期目。6周期目は天井。
+ * 高設定ほど優遇されるとされるが、設定別の数値は非公開のため推定（尤度）には使わず、比較表示だけに使う。
+ */
+export const PERIOD_AT_EXPECTATION_SETTING1 = [0.4, 0.4, 0.3, 0.3, 0.3, 1.0];
+
+/**
+ * 周期メモ（[{display_game, hit}] の時系列）を、初当たりごとのまとまりに集計する。
+ * AT当選（hit=true）の次の周期から数え直す。
+ */
+export function summarizePeriodLog(periodLog = []) {
+  const hits = [];
+  let current = [];
+  for (const entry of periodLog) {
+    current.push(entry);
+    if (entry.hit) {
+      hits.push({ period: current.length, entries: current });
+      current = [];
+    }
+  }
+  const firstPeriodHits = hits.filter((h) => h.period === 1).length;
+  return {
+    hits, // 初当たりごと: { period: 何周期目で当たったか, entries }
+    ongoing: current, // 最後の初当たり以降、まだ当たっていない周期
+    currentPeriod: current.length + 1, // 次に消化するのは何周期目か
+    averageHitPeriod: hits.length > 0 ? hits.reduce((s, h) => s + h.period, 0) / hits.length : null,
+    firstPeriodHitRate: hits.length > 0 ? firstPeriodHits / hits.length : null,
+  };
+}
+
+/**
+ * 巫女ポイント0メモ（[{total_game, won, kansuke}]）を集計する。
+ * 乙女アタック当選率の解析値は「カンスケ滞在時を除く」数値なので、カンスケ中の分は判別の母数から外す。
+ */
+export function summarizeMikoLog(mikoLog = []) {
+  const counted = mikoLog.filter((m) => !m.kansuke);
+  return {
+    reachCount: counted.length,
+    winCount: counted.filter((m) => m.won).length,
+    kansukeCount: mikoLog.length - counted.length,
+  };
+}
+
 function findMinSetting(options, value) {
   const found = options.find((o) => o.value === value);
   return found ? found.minSetting : null;
@@ -64,8 +107,12 @@ function findMinSetting(options, value) {
 export function buildEstimate(obs) {
   const gameCount = Number(obs.game_count) || 0;
   const atCount = Number(obs.at_count) || 0;
-  const mikoReachCount = Number(obs.miko_reach_count) || 0;
-  const czWinCount = Number(obs.cz_win_count) || 0;
+  // 巫女ポイント0メモがあればそちらから集計する（カンスケ中を除外できるため、手入力の回数より優先）。
+  const mikoLog = Array.isArray(obs.miko_log) ? obs.miko_log : [];
+  const mikoSummary = summarizeMikoLog(mikoLog);
+  const mikoReachCount = mikoLog.length > 0 ? mikoSummary.reachCount : Number(obs.miko_reach_count) || 0;
+  const czWinCount = mikoLog.length > 0 ? mikoSummary.winCount : Number(obs.cz_win_count) || 0;
+  const periodSummary = summarizePeriodLog(Array.isArray(obs.period_log) ? obs.period_log : []);
 
   const samples = [
     { key: "at", label: "AT初当たり", k: atCount, n: gameCount, rates: AT_PROBABILITY },
@@ -85,5 +132,7 @@ export function buildEstimate(obs) {
     observedCzRate: mikoReachCount > 0 ? czWinCount / mikoReachCount : null,
     hintMinSetting, // スタンプ・枚数表示から言える「これ以上濃厚」の最低設定（無ければnull）
     samples,
+    periodSummary,
+    mikoSummary,
   };
 }

@@ -431,6 +431,28 @@ export async function setInstalledMachines(db, shopId, machineIds) {
  * 判別基準は機種ごとに全く違うため、ここでは数値の妥当性チェックだけ行い、
  * 理論値との突き合わせ（推定）は js/logic/settingReference/ 側の責務にする。
  */
+function toOptionalNonNegativeInt(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+/** 周期メモ（[{display_game, hit}]）を保存用に正規化する。 */
+function normalizePeriodLog(log) {
+  if (!Array.isArray(log)) return [];
+  return log.map((e) => ({ display_game: toOptionalNonNegativeInt(e.display_game), hit: Boolean(e.hit) }));
+}
+
+/** 巫女ポイント0メモ（[{total_game, won, kansuke}]）を保存用に正規化する。 */
+function normalizeMikoLog(log) {
+  if (!Array.isArray(log)) return [];
+  return log.map((e) => ({
+    total_game: toOptionalNonNegativeInt(e.total_game),
+    won: Boolean(e.won),
+    kansuke: Boolean(e.kansuke),
+  }));
+}
+
 function buildSettingObservationFields(form) {
   const gameCount = parseIntField(form.game_count, "消化ゲーム数", { required: false, minimum: 0 });
   const atCount = parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
@@ -458,6 +480,8 @@ function buildSettingObservationFields(form) {
     bonus_direct_count: bonusDirectCount,
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
+    period_log: normalizePeriodLog(form.period_log),
+    miko_log: normalizeMikoLog(form.miko_log),
     memo: (form.memo ?? "").toString().trim(),
   };
 }

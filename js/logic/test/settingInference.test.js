@@ -5,7 +5,13 @@
  */
 import assert from "node:assert/strict";
 import { estimateSettingLikelihoods } from "../settingInference.js";
-import { buildEstimate, AT_PROBABILITY, CZ_WIN_RATE } from "../settingReference/sengokuOtome5.js";
+import {
+  buildEstimate,
+  AT_PROBABILITY,
+  CZ_WIN_RATE,
+  summarizePeriodLog,
+  summarizeMikoLog,
+} from "../settingReference/sengokuOtome5.js";
 import { getReferenceByMachineName, getReferenceByKey } from "../settingReference/index.js";
 
 let passCount = 0;
@@ -119,6 +125,54 @@ test("getReferenceByKey: キーからも見つかる", () => {
   const ref = getReferenceByKey("sengoku_otome5");
   assert.ok(ref);
   assert.equal(ref.MACHINE_NAME, "L戦国乙女5 業火を穿つ宿焔の双刃");
+});
+
+// ---------------------------------------------------------------------------
+test("summarizePeriodLog: 当選ごとに何周期目かを数え、進行中の周期も返す", () => {
+  const s = summarizePeriodLog([
+    { display_game: 100, hit: false },
+    { display_game: 50, hit: true }, // 2周期目で当選
+    { display_game: 200, hit: true }, // 1周期目で当選
+    { display_game: 100, hit: false }, // 進行中
+  ]);
+  assert.deepEqual(s.hits.map((h) => h.period), [2, 1]);
+  assert.equal(s.ongoing.length, 1);
+  assert.equal(s.currentPeriod, 2);
+  assert.equal(s.averageHitPeriod, 1.5);
+  assert.equal(s.firstPeriodHitRate, 0.5);
+});
+
+test("summarizePeriodLog: 空なら統計はnull・次は1周期目", () => {
+  const s = summarizePeriodLog([]);
+  assert.equal(s.hits.length, 0);
+  assert.equal(s.currentPeriod, 1);
+  assert.equal(s.averageHitPeriod, null);
+});
+
+test("summarizeMikoLog: カンスケ中は母数から除外する", () => {
+  const m = summarizeMikoLog([
+    { total_game: 300, won: true, kansuke: false },
+    { total_game: 700, won: false, kansuke: false },
+    { total_game: 900, won: true, kansuke: true },
+  ]);
+  assert.equal(m.reachCount, 2);
+  assert.equal(m.winCount, 1);
+  assert.equal(m.kansukeCount, 1);
+});
+
+test("buildEstimate: 巫女メモがあれば手入力の回数よりメモの集計を使う", () => {
+  const e = buildEstimate({
+    game_count: 1000,
+    miko_reach_count: 99,
+    cz_win_count: 99,
+    miko_log: [
+      { total_game: 300, won: true, kansuke: false },
+      { total_game: 700, won: false, kansuke: false },
+      { total_game: 900, won: true, kansuke: true },
+    ],
+  });
+  assert.equal(e.observedCzRate, 0.5);
+  assert.equal(e.mikoSummary.kansukeCount, 1);
 });
 
 console.log(`\n${passCount} 件成功`);
