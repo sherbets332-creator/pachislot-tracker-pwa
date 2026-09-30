@@ -153,6 +153,27 @@ await test("設定判別ツール: 記録一覧に簡易推定の一言サマリ
   assert.match(container.textContent, /設定6以上濃厚/);
 });
 
+await test("観測記録フォーム: 短縮天井（設定変更示唆）にチェックすると推定パネルと一覧に出る", async (db, container) => {
+  const shopId = await createShop(db, { name: "店N", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-ceiling-reset-hint").checked = true;
+  fireEvent(container.querySelector("#f-ceiling-reset-hint"), "change");
+  await wait();
+
+  assert.match(container.querySelector("#estimate-panel").textContent, /設定変更（据え置きではない）の示唆があります/);
+
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].ceiling_reset_hint, true);
+
+  await renderSettingTool(container, db, new URLSearchParams(`shop_id=${shopId}&machine_id=${machineId}`));
+  assert.match(container.textContent, /設定変更の示唆あり/);
+});
+
 await test("観測記録フォーム: 編集・削除ができる", async (db, container) => {
   const shopId = await createShop(db, { name: "店G", exchange_rate: "20", lending_rate: "20" });
   const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });

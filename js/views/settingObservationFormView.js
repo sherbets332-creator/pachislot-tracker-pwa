@@ -92,6 +92,13 @@ function renderEstimatePanel(reference, estimate) {
                <span class="muted">（数値は非公開。多いほど高設定期待）</span></div>`
           : ""
       }
+      ${
+        estimate.settingChangeHint
+          ? `<div class="alert" style="margin-top:8px;">設定変更（据え置きではない）の示唆があります。
+               <div class="small">短縮天井（650G／4周期以内）での強制AT当選は、設定変更があった日に起きるとされています。
+               設定の高低とは別の情報です。</div></div>`
+          : ""
+      }
     </div>
   `;
 }
@@ -153,6 +160,7 @@ function readForm(container, logs = null) {
     cz_win_count: val("f-cz-win-count"),
     max_ending_stamp: val("f-max-ending-stamp"),
     max_payout_over: val("f-max-payout-over"),
+    ceiling_reset_hint: container.querySelector("#f-ceiling-reset-hint").checked,
     memo: val("f-memo"),
   };
 }
@@ -200,6 +208,7 @@ export async function renderSettingObservationForm(
     cz_win_count: observation?.cz_win_count ?? 0,
     max_ending_stamp: observation?.max_ending_stamp ?? "none",
     max_payout_over: observation?.max_payout_over ?? "none",
+    ceiling_reset_hint: observation?.ceiling_reset_hint ?? false,
     period_log: observation?.period_log ?? [],
     miko_log: observation?.miko_log ?? [],
     hint_flags: observation?.hint_flags ?? [],
@@ -351,6 +360,14 @@ export async function renderSettingObservationForm(
         <select id="f-max-payout-over">${payoutOptions}</select>
       </div>
       <div class="field">
+        <label class="small" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="f-ceiling-reset-hint" ${values.ceiling_reset_hint ? "checked" : ""}>
+          短縮天井（650G／4周期以内）で強制AT当選するのを見た
+        </label>
+        <div class="hint">通常の天井は999G・6周期ですが、設定変更があった日はここまで短縮されるとされています。
+          設定の高低ではなく「今日、設定が変更された（据え置きではない）」ことの示唆です。</div>
+      </div>
+      <div class="field">
         <label>メモ</label>
         <textarea id="f-memo" rows="2">${escapeHtml(values.memo)}</textarea>
       </div>
@@ -498,6 +515,7 @@ export async function renderSettingObservationForm(
     "f-cz-win-count",
     "f-max-ending-stamp",
     "f-max-payout-over",
+    "f-ceiling-reset-hint",
   ].forEach((id) => {
     $(id).addEventListener("input", updateEstimate);
     $(id).addEventListener("change", updateEstimate);

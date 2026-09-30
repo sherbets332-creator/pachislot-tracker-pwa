@@ -7,6 +7,15 @@
  * 出典（2026-09調査時点）:
  * - https://nana-press.com/kaiseki/machine/1160/37314/
  * - https://chonborista.com/slot/orinpia-slot/256147/
+ * - https://pachiseven.jp/articles/detail/26087
+ * - https://p-town.dmm.com/specials/5110
+ *
+ * 調査したが設定別の数値が見つからなかったもの（2026-09時点）:
+ * 周期テーブル（通常A/通常B/天国）への移行率・滞在率、引き戻しモード（AT終了後1周期目）の当選率は、
+ * いずれも複数の解析サイトを確認したが「設定1のみ約40%」という概数しか公表されておらず、
+ * 設定2〜6の数値が無いため推定（尤度）には組み込んでいない。なお「引き戻しモードの当選率」は
+ * 実質的に本ファイルの`summarizePeriodLog`が返す1周期目当選率（`firstPeriodHitRate`）と同じ意味
+ * （AT終了直後の1周期目＝引き戻しモード）なので、既存の周期メモ機能でカバーできている。
  */
 import { estimateSettingLikelihoods } from "../settingInference.js";
 
@@ -55,6 +64,16 @@ export const PAYOUT_OVER_HINTS = [
  * 高設定ほど優遇されるとされるが、設定別の数値は非公開のため推定（尤度）には使わず、比較表示だけに使う。
  */
 export const PERIOD_AT_EXPECTATION_SETTING1 = [0.4, 0.4, 0.3, 0.3, 0.3, 1.0];
+
+/**
+ * 天井（周期テーブルによらない、実ゲーム数の絶対上限）。通常は999G・6周期だが、設定変更があった日は
+ * 650G・4周期に短縮される。設定の高低ではなく「今日、設定が触られた（据え置きではない）」ことの
+ * 判別材料。ソース: pachiseven.jp「Ｌ戦国乙女5の設定推測＆設定6挙動まとめ」（2026-09時点）。
+ */
+export const NORMAL_CEILING_GAMES = 999;
+export const NORMAL_CEILING_PERIODS = 6;
+export const SETTING_CHANGE_CEILING_GAMES = 650;
+export const SETTING_CHANGE_CEILING_PERIODS = 4;
 
 /**
  * 周期メモ（[{display_game, hit, via?, linked_miko_id?}] の時系列）を、初当たりごとのまとまりに集計する。
@@ -167,9 +186,12 @@ function findMinSetting(options, value) {
  * 1回の観測記録（1セッション分の入力値）から、設定ごとの相対尤度と示唆情報をまとめて返す。
  *
  * @param {{game_count?: number, total_game_count?: number, at_count?: number, miko_reach_count?: number,
- *           cz_win_count?: number, max_ending_stamp?: string, max_payout_over?: string}} obs
+ *           cz_win_count?: number, max_ending_stamp?: string, max_payout_over?: string,
+ *           ceiling_reset_hint?: boolean}} obs
  *   game_countは「通常ゲーム数」（AT・ボーナス消化を除く）で推定の分母に使う。total_game_countは
- *   AT消化分も含めた「総ゲーム数」で、参考表示のみ（推定には使わない）。
+ *   AT消化分も含めた「総ゲーム数」で、参考表示のみ（推定には使わない）。ceiling_reset_hintは
+ *   短縮天井（650G/4周期以内の強制AT当選）を見たかどうかで、設定変更（据え置きではない）の示唆
+ *   （設定の高低とは別軸のため、尤度計算には使わずsettingChangeHintとしてそのまま返す）。
  */
 export function buildEstimate(obs) {
   const gameCount = Number(obs.game_count) || 0; // 通常ゲーム数（AT・ボーナス消化を除く）。推定の分母はこちら。
@@ -224,6 +246,9 @@ export function buildEstimate(obs) {
     minSettingSources, // その根拠一覧 [{label, minSetting}]
     parityHint: { odd: hintSummary.oddCount, even: hintSummary.evenCount },
     strapSummary: summarizeStraps(obs.strap_counts || {}),
+    // 短縮天井（650G/4周期以内の強制当選）を見た＝設定変更（据え置きではない）の示唆。設定の高低とは
+    // 別軸の情報なので、尤度（likelihoods）には混ぜず別項目で返す。
+    settingChangeHint: Boolean(obs.ceiling_reset_hint),
     samples,
     periodSummary,
     mikoSummary,

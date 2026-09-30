@@ -190,6 +190,16 @@ test("summarizeEstimateHeadline: データがあれば最尤設定と割合を�
   assert.match(headline, /設定6寄り（\d+%）/);
 });
 
+test("buildEstimate: 短縮天井の示唆(ceiling_reset_hint)は設定変更示唆として返すだけで、尤度には混ぜない", () => {
+  const withHint = buildEstimate({ game_count: 1000, at_count: 4, ceiling_reset_hint: true });
+  assert.equal(withHint.settingChangeHint, true);
+
+  const withoutHint = buildEstimate({ game_count: 1000, at_count: 4 });
+  assert.equal(withoutHint.settingChangeHint, false);
+  // 短縮天井の示唆の有無で推定尤度が変わらないことを確認する。
+  assert.deepEqual(withHint.likelihoods, withoutHint.likelihoods);
+});
+
 test("buildEstimate: 総ゲーム数は参考値として通すだけで、推定には使わない", () => {
   const withTotal = buildEstimate({ game_count: 1000, at_count: 4, total_game_count: 1200 });
   assert.equal(withTotal.totalGameCount, 1200);

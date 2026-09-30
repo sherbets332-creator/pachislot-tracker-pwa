@@ -517,6 +517,7 @@ function buildSettingObservationFields(form) {
     bonus_direct_count: bonusDirectCount,
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
+    ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
     period_log: normalizePeriodLog(form.period_log),
     miko_log: normalizeMikoLog(form.miko_log),
     hint_flags: Array.isArray(form.hint_flags) ? form.hint_flags.map(String) : [],

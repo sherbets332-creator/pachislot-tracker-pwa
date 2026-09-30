@@ -45,7 +45,8 @@ export async function renderSettingTool(container, db, query) {
       const listHtml = observations.length
         ? `<div class="list">${observations
             .map((o) => {
-              const headline = summarizeEstimateHeadline(reference.buildEstimate(o));
+              const estimate = reference.buildEstimate(o);
+              const headline = summarizeEstimateHeadline(estimate);
               return `
             <a class="list-item" href="${buildUrl(`/setting-tool/${o.id}/edit`)}" style="text-decoration:none;color:inherit;display:block;">
               <div class="fw-bold">${o.play_date}${o.machine_number ? `（台番 ${escapeHtml(o.machine_number)}）` : ""}</div>
@@ -54,6 +55,7 @@ export async function renderSettingTool(container, db, query) {
                 ${o.max_ending_stamp && o.max_ending_stamp !== "none" ? ` ／ 終了画面示唆あり` : ""}
               </div>
               ${headline ? `<div class="small" style="margin-top:2px;"><strong>${escapeHtml(headline)}</strong></div>` : ""}
+              ${estimate.settingChangeHint ? `<div class="small" style="margin-top:2px;">⚠ 設定変更の示唆あり</div>` : ""}
             </a>`;
             })
             .join("")}</div>`
