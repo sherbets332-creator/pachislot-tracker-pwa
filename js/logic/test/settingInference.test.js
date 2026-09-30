@@ -161,6 +161,18 @@ test("summarizeMikoLog: カンスケ中は母数から除外する", () => {
   assert.equal(m.averageInterval, 300); // (700-300 + 900-700) / 2
 });
 
+test("summarizeMikoLog: 乙女アタック当選のうちAT当選した回数を数える（at_won未設定の旧データはAT当選扱い）", () => {
+  const m = summarizeMikoLog([
+    { total_game: 300, won: true, at_won: false, kansuke: false },
+    { total_game: 700, won: true, at_won: true, kansuke: false },
+    { total_game: 900, won: true, kansuke: false }, // 旧データ
+    { total_game: 1200, won: false, at_won: false, kansuke: false },
+  ]);
+  assert.equal(m.winCount, 3); // CZ当選率の分子はATの成否に関係なく乙女アタック当選
+  assert.equal(m.czWinTotal, 3);
+  assert.equal(m.atWinCount, 2);
+});
+
 test("summarizeMikoLog: 総G数が空欄の回は間隔計算から除外し、1件以下ならnull", () => {
   const single = summarizeMikoLog([{ total_game: 300, won: false, kansuke: false }]);
   assert.equal(single.averageInterval, null);

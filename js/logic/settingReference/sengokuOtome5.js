@@ -84,8 +84,9 @@ export const SETTING_CHANGE_CEILING_PERIODS = 4;
 /**
  * 周期メモ（[{display_game, hit, via?, linked_miko_id?}] の時系列）を、初当たりごとのまとまりに集計する。
  * AT当選（hit=true）の次の周期から数え直す。
- * 巫女ポイント0メモ側で乙女アタックに当選した場合もAT初当たりなので、その時点で周期メモ側にも
+ * 巫女ポイント0メモ側で乙女アタック→AT当選までした場合もAT初当たりなので、その時点で周期メモ側にも
  * via:"miko" の区切りエントリ（画面側が自動で追加）が入り、同様に次の周期は1周期目から数え直される。
+ * 乙女アタックに当選してもATを取れなかった場合は区切りを入れない（周期はそのまま継続）。
  */
 export function summarizePeriodLog(periodLog = []) {
   const hits = [];
@@ -108,7 +109,18 @@ export function summarizePeriodLog(periodLog = []) {
 }
 
 /**
- * 巫女ポイント0メモ（[{total_game, won, kansuke}]）を集計する。
+ * 巫女ポイント0メモ1件がAT当選まで行ったか。流れは「巫女ポイント0 → 乙女アタック当否 → AT当否」で、
+ * 乙女アタックに当選してもATを取れなければ周期はリセットされない。at_won導入前のデータ
+ * （at_won未設定）は乙女アタック当選＝AT当選として扱う。
+ */
+export function isMikoAtWin(m) {
+  if (!m || !m.won) return false;
+  return m.at_won === undefined || m.at_won === null ? true : Boolean(m.at_won);
+}
+
+/**
+ * 巫女ポイント0メモ（[{total_game, won, at_won, kansuke}]）を集計する。
+ * won = 乙女アタック（CZ）当選、at_won = そこからAT当選。
  * 乙女アタック当選率の解析値は「カンスケ滞在時を除く」数値なので、カンスケ中の分は判別の母数から外す。
  * total_gameを入力した回同士の差から、平均何G間隔で0ptに到達しているかも計算する（任意入力欄のため
  * 埋まっている回だけを対象にする。参考表示のみで、推定には使わない）。
@@ -124,6 +136,9 @@ export function summarizeMikoLog(mikoLog = []) {
   return {
     reachCount: counted.length,
     winCount: counted.filter((m) => m.won).length,
+    // 乙女アタック当選のうちAT当選まで行った回数（参考表示のみ。カンスケ中も含めた全件で数える）
+    czWinTotal: mikoLog.filter((m) => m.won).length,
+    atWinCount: mikoLog.filter((m) => isMikoAtWin(m)).length,
     kansukeCount: mikoLog.length - counted.length,
     averageInterval: intervals.length > 0 ? intervals.reduce((s, v) => s + v, 0) / intervals.length : null,
   };

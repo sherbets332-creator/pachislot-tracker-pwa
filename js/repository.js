@@ -455,12 +455,18 @@ function normalizePeriodLog(log) {
 /** 巫女ポイント0メモ（[{id, total_game, won, kansuke}]）を保存用に正規化する。idは周期メモとの連動に使う。 */
 function normalizeMikoLog(log) {
   if (!Array.isArray(log)) return [];
-  return log.map((e) => ({
-    id: e.id ?? null,
-    total_game: toOptionalNonNegativeInt(e.total_game),
-    won: Boolean(e.won),
-    kansuke: Boolean(e.kansuke),
-  }));
+  return log.map((e) => {
+    const won = Boolean(e.won);
+    return {
+      id: e.id ?? null,
+      total_game: toOptionalNonNegativeInt(e.total_game),
+      won, // 乙女アタック（CZ）当選
+      // AT当選（乙女アタック当選時のみ）。at_won導入前のデータは「乙女アタック当選＝AT当選」として
+      // 周期メモに区切りを入れていたので、未設定なら当選扱いのまま読み込む。
+      at_won: won ? (e.at_won === undefined || e.at_won === null ? true : Boolean(e.at_won)) : false,
+      kansuke: Boolean(e.kansuke),
+    };
+  });
 }
 
 /** 乙女ストラップ等の出現回数（{キー: 回数}）を保存用に正規化する。 */

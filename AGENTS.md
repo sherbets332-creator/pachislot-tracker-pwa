@@ -41,9 +41,9 @@ mainブランチにpushすると自動で再デプロイされる。
   対応機種は機種マスタにその名前どおりに登録してもらう必要がある
 - 戦国乙女5では、`game_count`（通常ゲーム数、推定の分母）と`total_game_count`（総ゲーム数、AT消化分込み・
   参考値で推定には未使用）を別フィールドで持つ。周期メモ（`period_log`）は`display_game`によるものだけでなく、
-  巫女ポイント0メモ（`miko_log`）側でAT当選（乙女アタック当選）した場合も画面側が自動で
+  巫女ポイント0メモ（`miko_log`、`won`=乙女アタック当否・`at_won`=そこからのAT当否）側でAT当選まで行った場合も画面側が自動で
   `{ display_game: null, hit: true, via: "miko", linked_miko_id: <対応するmiko_logエントリのid> }`
-  を追加する（AT初当たりで次周期は1周期目からになるため）。削除・取消時はこのリンクを辿って
+  を追加する（AT初当たりで次周期は1周期目からになるため。乙女アタック当選でもATを取れなければ周期は継続するので区切りは入れない。`at_won`未設定の旧データはAT当選扱い）。削除・取消時はこのリンクを辿って
   両方の配列を連動して消す（`settingObservationFormView.js`のmiko-del／period-undo-btn参照）
 - `js/logic/settingInference.js`の`summarizeEstimateHeadline(estimate)`は、`buildEstimate(obs)`の
   戻り値（`settingLabels`・`likelihoods`・`hintMinSetting`・`samples`という契約上必ずある項目だけを見る）

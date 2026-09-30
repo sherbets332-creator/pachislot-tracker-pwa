@@ -108,7 +108,7 @@ function renderEstimatePanel(reference, estimate) {
 function renderPeriodSection(reference, summary) {
   const expectation = reference.PERIOD_AT_EXPECTATION_SETTING1 || [];
   const entryLabel = (e) =>
-    e.via === "miko" ? "乙女アタック" : e.display_game !== null && e.display_game !== undefined ? `${e.display_game}G` : "?G";
+    e.via === "miko" ? "乙女アタック→AT" : e.display_game !== null && e.display_game !== undefined ? `${e.display_game}G` : "?G";
   const hitRows = summary.hits
     .map(
       (h, i) => `
@@ -135,17 +135,21 @@ function renderMikoSection(mikoLog, summary) {
         <div class="small" style="display:flex;align-items:center;gap:8px;">
           <span>${i + 1}.</span>
           <span>${m.total_game !== null && m.total_game !== undefined ? `${m.total_game}G` : "総G数なし"}</span>
-          <strong>${m.won ? "当選" : "ハズレ"}</strong>
+          <strong>${!m.won ? "乙女アタック ハズレ" : m.at_won === false ? "乙女アタック当選→AT取れず" : "乙女アタック当選→AT当選"}</strong>
           ${m.kansuke ? '<span class="muted">（カンスケ中・判別から除外）</span>' : ""}
           <button type="button" class="btn btn-sm miko-del" data-index="${i}" style="margin-left:auto;">×</button>
         </div>`
     )
     .join("");
+  const atStats =
+    summary && summary.czWinTotal > 0
+      ? `<div class="small" style="margin-top:6px;">乙女アタック当選${summary.czWinTotal}回のうちAT当選${summary.atWinCount}回</div>`
+      : "";
   const stats =
     summary && summary.averageInterval
       ? `<div class="small muted" style="margin-top:6px;">平均${Math.round(summary.averageInterval)}G間隔で到達</div>`
       : "";
-  return rows + stats;
+  return rows + atStats + stats;
 }
 
 function readForm(container, logs = null) {
@@ -312,10 +316,14 @@ export async function renderSettingObservationForm(
           <label class="small" style="display:flex;align-items:center;gap:4px;">
             <input type="checkbox" id="f-miko-kansuke">カンスケ中
           </label>
-          <button type="button" class="btn" id="miko-lose-btn">ハズレ</button>
-          <button type="button" class="btn btn-primary" id="miko-win-btn">当選</button>
         </div>
-        <div class="hint small muted">乙女アタック当選率の解析値はカンスケ滞在時を除いた数値のため、カンスケ中の分は判別から外します。</div>
+        <div class="field" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn" id="miko-lose-btn">乙女アタック ハズレ</button>
+          <button type="button" class="btn" id="miko-cz-only-btn">乙女アタック当選→AT取れず</button>
+          <button type="button" class="btn btn-primary" id="miko-win-btn">乙女アタック当選→AT当選</button>
+        </div>
+        <div class="hint small muted">AT当選まで行った時だけ、周期メモが1周期目からに戻ります（乙女アタックに当選してもATを取れなければ周期はそのまま）。
+          乙女アタック当選率の解析値はカンスケ滞在時を除いた数値のため、カンスケ中の分は判別から外します。</div>
         <div id="miko-log"></div>
       </div>
 
@@ -430,8 +438,8 @@ export async function renderSettingObservationForm(
     container.querySelectorAll(".miko-del").forEach((btn) =>
       btn.addEventListener("click", async () => {
         const [removed] = logs.miko_log.splice(Number(btn.dataset.index), 1);
-        // 乙女アタック当選の削除は、周期メモ側に自動で入れた区切りエントリも一緒に取り消す。
-        if (removed && removed.won) {
+        // AT当選の削除は、周期メモ側に自動で入れた区切りエントリも一緒に取り消す。
+        if (removed && removed.id !== null && removed.id !== undefined) {
           const linkedIndex = logs.period_log.findIndex((p) => p.linked_miko_id === removed.id);
           if (linkedIndex !== -1) logs.period_log.splice(linkedIndex, 1);
         }
@@ -492,19 +500,28 @@ export async function renderSettingObservationForm(
     await onLogChanged();
   });
 
-  async function addMiko(won) {
+  // 巫女ポイント0 → 乙女アタック当否（won） → AT当否（atWon）。
+  async function addMiko(won, atWon = false) {
     const raw = $("f-miko-total-game").value;
-    const entry = { id: Date.now(), total_game: raw === "" ? null : Number(raw), won, kansuke: $("f-miko-kansuke").checked };
+    const entry = {
+      id: Date.now(),
+      total_game: raw === "" ? null : Number(raw),
+      won,
+      at_won: won && atWon,
+      kansuke: $("f-miko-kansuke").checked,
+    };
     logs.miko_log.push(entry);
-    if (won) {
-      // 乙女アタック当選はAT初当たり。次の周期は1周期目から数え直しになるので、周期メモ側にも区切りを入れる。
+    if (entry.at_won) {
+      // AT当選は初当たり。次の周期は1周期目から数え直しになるので、周期メモ側にも区切りを入れる。
+      // 乙女アタックに当選してもATを取れなかった場合は周期が続くので、区切りは入れない。
       logs.period_log.push({ display_game: null, hit: true, via: "miko", linked_miko_id: entry.id });
     }
     $("f-miko-total-game").value = "";
     $("f-miko-kansuke").checked = false;
     await onLogChanged();
   }
-  $("miko-win-btn").addEventListener("click", () => addMiko(true));
+  $("miko-win-btn").addEventListener("click", () => addMiko(true, true));
+  $("miko-cz-only-btn").addEventListener("click", () => addMiko(true, false));
 
   // 乙女ストラップ：＋/−で回数を数え、そのたびに自動保存。
   async function changeStrap(key, delta) {

@@ -278,6 +278,36 @@ await test("観測記録フォーム: 巫女ポイント0で乙女アタック�
   assert.equal(after[0].miko_log.length, 0);
 });
 
+await test("観測記録フォーム: 乙女アタック当選でもATを取れなければ周期は区切られない（CZ当選には数える）", async (db, container) => {
+  const shopId = await createShop(db, { name: "店M", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-period-game").value = "100";
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  container.querySelector("#f-miko-total-game").value = "150";
+  container.querySelector("#miko-cz-only-btn").click();
+  await wait();
+
+  assert.equal(container.querySelector("#period-current").textContent, "（次は2周期目）");
+  assert.equal(container.querySelector("#f-cz-win-count").value, "1");
+  assert.match(container.querySelector("#miko-log").textContent, /AT取れず/);
+  assert.match(container.querySelector("#miko-log").textContent, /乙女アタック当選1回のうちAT当選0回/);
+
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].period_log.length, 1);
+  assert.equal(observations[0].miko_log[0].won, true);
+  assert.equal(observations[0].miko_log[0].at_won, false);
+
+  // 削除しても周期メモ側は影響を受けない
+  container.querySelector('.miko-del[data-index="0"]').click();
+  await wait();
+  const after = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(after[0].period_log.length, 1);
+  assert.equal(after[0].miko_log.length, 0);
+});
+
 await test("観測記録フォーム: 通常ゲーム数と総ゲーム数を分けて記録できる。総ゲーム数が通常を下回るとエラー", async (db, container) => {
   const shopId = await createShop(db, { name: "店L", exchange_rate: "20", lending_rate: "20" });
   const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
