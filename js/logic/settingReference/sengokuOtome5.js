@@ -57,8 +57,10 @@ export const PAYOUT_OVER_HINTS = [
 export const PERIOD_AT_EXPECTATION_SETTING1 = [0.4, 0.4, 0.3, 0.3, 0.3, 1.0];
 
 /**
- * 周期メモ（[{display_game, hit}] の時系列）を、初当たりごとのまとまりに集計する。
+ * 周期メモ（[{display_game, hit, via?, linked_miko_id?}] の時系列）を、初当たりごとのまとまりに集計する。
  * AT当選（hit=true）の次の周期から数え直す。
+ * 巫女ポイント0メモ側で乙女アタックに当選した場合もAT初当たりなので、その時点で周期メモ側にも
+ * via:"miko" の区切りエントリ（画面側が自動で追加）が入り、同様に次の周期は1周期目から数え直される。
  */
 export function summarizePeriodLog(periodLog = []) {
   const hits = [];
@@ -83,13 +85,22 @@ export function summarizePeriodLog(periodLog = []) {
 /**
  * 巫女ポイント0メモ（[{total_game, won, kansuke}]）を集計する。
  * 乙女アタック当選率の解析値は「カンスケ滞在時を除く」数値なので、カンスケ中の分は判別の母数から外す。
+ * total_gameを入力した回同士の差から、平均何G間隔で0ptに到達しているかも計算する（任意入力欄のため
+ * 埋まっている回だけを対象にする。参考表示のみで、推定には使わない）。
  */
 export function summarizeMikoLog(mikoLog = []) {
   const counted = mikoLog.filter((m) => !m.kansuke);
+  const withGame = mikoLog.filter((m) => m.total_game !== null && m.total_game !== undefined);
+  const intervals = [];
+  for (let i = 1; i < withGame.length; i++) {
+    const diff = withGame[i].total_game - withGame[i - 1].total_game;
+    if (diff > 0) intervals.push(diff);
+  }
   return {
     reachCount: counted.length,
     winCount: counted.filter((m) => m.won).length,
     kansukeCount: mikoLog.length - counted.length,
+    averageInterval: intervals.length > 0 ? intervals.reduce((s, v) => s + v, 0) / intervals.length : null,
   };
 }
 
@@ -155,12 +166,17 @@ function findMinSetting(options, value) {
 /**
  * 1回の観測記録（1セッション分の入力値）から、設定ごとの相対尤度と示唆情報をまとめて返す。
  *
- * @param {{game_count?: number, at_count?: number, miko_reach_count?: number, cz_win_count?: number,
- *           max_ending_stamp?: string, max_payout_over?: string}} obs
+ * @param {{game_count?: number, total_game_count?: number, at_count?: number, miko_reach_count?: number,
+ *           cz_win_count?: number, max_ending_stamp?: string, max_payout_over?: string}} obs
+ *   game_countは「通常ゲーム数」（AT・ボーナス消化を除く）で推定の分母に使う。total_game_countは
+ *   AT消化分も含めた「総ゲーム数」で、参考表示のみ（推定には使わない）。
  */
 export function buildEstimate(obs) {
-  const gameCount = Number(obs.game_count) || 0;
+  const gameCount = Number(obs.game_count) || 0; // 通常ゲーム数（AT・ボーナス消化を除く）。推定の分母はこちら。
   const atCount = Number(obs.at_count) || 0;
+  // 総ゲーム数（AT消化分も含む）は記録用の参考値で、推定計算には使わない。空欄なら null。
+  const totalRaw = obs.total_game_count;
+  const totalGameCount = totalRaw !== null && totalRaw !== undefined && String(totalRaw).trim() !== "" ? Number(totalRaw) || 0 : null;
   // 巫女ポイント0メモがあればそちらから集計する（カンスケ中を除外できるため、手入力の回数より優先）。
   const mikoLog = Array.isArray(obs.miko_log) ? obs.miko_log : [];
   const mikoSummary = summarizeMikoLog(mikoLog);
@@ -203,6 +219,7 @@ export function buildEstimate(obs) {
     observedAtRate: gameCount > 0 ? atCount / gameCount : null,
     observedCzRate: mikoReachCount > 0 ? czWinCount / mikoReachCount : null,
     observedBonusRate: bonusRecorded && gameCount > 0 ? bonusDirectCount / gameCount : null,
+    totalGameCount, // 総ゲーム数（参考表示のみ、推定には未使用）
     hintMinSetting, // 示唆から言える「これ以上濃厚」の最低設定（無ければnull）
     minSettingSources, // その根拠一覧 [{label, minSetting}]
     parityHint: { odd: hintSummary.oddCount, even: hintSummary.evenCount },

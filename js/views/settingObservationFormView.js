@@ -62,6 +62,11 @@ function renderEstimatePanel(reference, estimate) {
           : ""
       }
       ${
+        estimate.totalGameCount !== undefined && estimate.totalGameCount !== null
+          ? `<div class="small muted" style="margin-top:4px;">総ゲーム数：${estimate.totalGameCount}G（参考値。推定には通常ゲーム数のみ使用）</div>`
+          : ""
+      }
+      ${
         estimate.hintMinSetting
           ? `<div class="alert" style="margin-top:8px;">設定${estimate.hintMinSetting}以上が濃厚です。
                <div class="small">${(estimate.minSettingSources || [])
@@ -86,7 +91,8 @@ function renderEstimatePanel(reference, estimate) {
 
 function renderPeriodSection(reference, summary) {
   const expectation = reference.PERIOD_AT_EXPECTATION_SETTING1 || [];
-  const entryLabel = (e) => (e.display_game !== null && e.display_game !== undefined ? `${e.display_game}G` : "?G");
+  const entryLabel = (e) =>
+    e.via === "miko" ? "乙女アタック" : e.display_game !== null && e.display_game !== undefined ? `${e.display_game}G` : "?G";
   const hitRows = summary.hits
     .map(
       (h, i) => `
@@ -105,9 +111,9 @@ function renderPeriodSection(reference, summary) {
   return `${hitRows}${ongoing}${stats}`;
 }
 
-function renderMikoSection(mikoLog) {
+function renderMikoSection(mikoLog, summary) {
   if (mikoLog.length === 0) return "";
-  return mikoLog
+  const rows = mikoLog
     .map(
       (m, i) => `
         <div class="small" style="display:flex;align-items:center;gap:8px;">
@@ -119,6 +125,11 @@ function renderMikoSection(mikoLog) {
         </div>`
     )
     .join("");
+  const stats =
+    summary && summary.averageInterval
+      ? `<div class="small muted" style="margin-top:6px;">平均${Math.round(summary.averageInterval)}G間隔で到達</div>`
+      : "";
+  return rows + stats;
 }
 
 function readForm(container, logs = null) {
@@ -128,6 +139,7 @@ function readForm(container, logs = null) {
     play_date: val("f-play-date"),
     machine_number: val("f-machine-number"),
     game_count: val("f-game-count"),
+    total_game_count: val("f-total-game-count"),
     at_count: val("f-at-count"),
     bonus_direct_count: val("f-bonus-direct-count"),
     miko_reach_count: val("f-miko-reach-count"),
@@ -174,6 +186,7 @@ export async function renderSettingObservationForm(
     play_date: observation?.play_date ?? todayDateString(),
     machine_number: observation?.machine_number ?? "",
     game_count: observation?.game_count ?? 0,
+    total_game_count: observation?.total_game_count ?? "", // 空欄＝記録していない（任意項目）
     at_count: observation?.at_count ?? 0,
     bonus_direct_count: observation?.bonus_direct_count ?? "", // 空欄＝数えていない（推定に使わない）
     miko_reach_count: observation?.miko_reach_count ?? 0,
@@ -218,8 +231,14 @@ export async function renderSettingObservationForm(
         <input type="text" id="f-machine-number" value="${escapeHtml(values.machine_number)}">
       </div>
       <div class="field">
-        <label>消化ゲーム数</label>
+        <label>通常ゲーム数</label>
         <input type="number" id="f-game-count" min="0" inputmode="numeric" value="${values.game_count}">
+        <div class="hint">AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。</div>
+      </div>
+      <div class="field">
+        <label>総ゲーム数（任意）</label>
+        <input type="number" id="f-total-game-count" min="0" inputmode="numeric" placeholder="AT消化分も含めた合計。任意" value="${values.total_game_count ?? ""}">
+        <div class="hint">AT・ボーナス消化分も含めた、その日実際に回したゲーム数。記録用の参考値で、推定計算には使いません。</div>
       </div>
       <div class="field">
         <label>AT当選回数（初当たり合計）</label>
@@ -353,18 +372,23 @@ export async function renderSettingObservationForm(
     $("period-log").innerHTML = renderPeriodSection(reference, periodSummary);
     $("period-undo-btn").style.display = logs.period_log.length ? "" : "none";
 
-    $("miko-log").innerHTML = renderMikoSection(logs.miko_log);
+    const mikoSummary = reference.summarizeMikoLog(logs.miko_log);
+    $("miko-log").innerHTML = renderMikoSection(logs.miko_log, mikoSummary);
     const useMikoLog = logs.miko_log.length > 0;
     if (useMikoLog) {
-      const m = reference.summarizeMikoLog(logs.miko_log);
-      $("f-miko-reach-count").value = m.reachCount;
-      $("f-cz-win-count").value = m.winCount;
+      $("f-miko-reach-count").value = mikoSummary.reachCount;
+      $("f-cz-win-count").value = mikoSummary.winCount;
     }
     $("f-miko-reach-count").readOnly = useMikoLog;
     $("f-cz-win-count").readOnly = useMikoLog;
     container.querySelectorAll(".miko-del").forEach((btn) =>
       btn.addEventListener("click", async () => {
-        logs.miko_log.splice(Number(btn.dataset.index), 1);
+        const [removed] = logs.miko_log.splice(Number(btn.dataset.index), 1);
+        // 乙女アタック当選の削除は、周期メモ側に自動で入れた区切りエントリも一緒に取り消す。
+        if (removed && removed.won) {
+          const linkedIndex = logs.period_log.findIndex((p) => p.linked_miko_id === removed.id);
+          if (linkedIndex !== -1) logs.period_log.splice(linkedIndex, 1);
+        }
         await onLogChanged();
       })
     );
@@ -413,13 +437,23 @@ export async function renderSettingObservationForm(
   $("period-miss-btn").addEventListener("click", () => addPeriod(false));
   $("period-hit-btn").addEventListener("click", () => addPeriod(true));
   $("period-undo-btn").addEventListener("click", async () => {
-    logs.period_log.pop();
+    const removed = logs.period_log.pop();
+    // 乙女アタック当選による自動区切りエントリを取り消す場合は、対応する巫女ポイント0メモも一緒に消す。
+    if (removed && removed.linked_miko_id) {
+      const mikoIndex = logs.miko_log.findIndex((m) => m.id === removed.linked_miko_id);
+      if (mikoIndex !== -1) logs.miko_log.splice(mikoIndex, 1);
+    }
     await onLogChanged();
   });
 
   async function addMiko(won) {
     const raw = $("f-miko-total-game").value;
-    logs.miko_log.push({ total_game: raw === "" ? null : Number(raw), won, kansuke: $("f-miko-kansuke").checked });
+    const entry = { id: Date.now(), total_game: raw === "" ? null : Number(raw), won, kansuke: $("f-miko-kansuke").checked };
+    logs.miko_log.push(entry);
+    if (won) {
+      // 乙女アタック当選はAT初当たり。次の周期は1周期目から数え直しになるので、周期メモ側にも区切りを入れる。
+      logs.period_log.push({ display_game: null, hit: true, via: "miko", linked_miko_id: entry.id });
+    }
     $("f-miko-total-game").value = "";
     $("f-miko-kansuke").checked = false;
     await onLogChanged();
@@ -450,6 +484,7 @@ export async function renderSettingObservationForm(
 
   [
     "f-game-count",
+    "f-total-game-count",
     "f-at-count",
     "f-bonus-direct-count",
     "f-miko-reach-count",

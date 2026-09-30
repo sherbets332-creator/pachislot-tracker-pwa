@@ -169,7 +169,7 @@ await test("観測記録フォーム: 編集・削除ができる", async (db, c
   assert.equal(observations.length, 0);
 });
 
-await test("観測記録フォーム: AT当選回数が消化ゲーム数を超えるとエラーになる", async (db, container) => {
+await test("観測記録フォーム: AT当選回数が通常ゲーム数を超えるとエラーになる", async (db, container) => {
   const shopId = await createShop(db, { name: "店H", exchange_rate: "20", lending_rate: "20" });
   const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
 
@@ -179,7 +179,7 @@ await test("観測記録フォーム: AT当選回数が消化ゲーム数を超�
   fireEvent(container.querySelector("#observation-form"), "submit");
   await wait();
 
-  assert.match(container.textContent, /AT当選回数が消化ゲーム数を超えています/);
+  assert.match(container.textContent, /AT当選回数が通常ゲーム数を超えています/);
   const observations = await listSettingObservations(db, { shopId, machineId });
   assert.equal(observations.length, 0);
 });
@@ -200,9 +200,67 @@ await test("観測記録フォーム: 周期メモを追加すると自動保存
   const observations = await listSettingObservations(db, { shopId, machineId });
   assert.equal(observations.length, 1, "新規でも1件目の追加で自動作成され、2件目以降は同じ記録を更新する");
   assert.deepEqual(observations[0].period_log, [
-    { display_game: 100, hit: false },
-    { display_game: 50, hit: true },
+    { display_game: 100, hit: false, via: null, linked_miko_id: null },
+    { display_game: 50, hit: true, via: null, linked_miko_id: null },
   ]);
+});
+
+await test("観測記録フォーム: 巫女ポイント0で乙女アタック当選すると、周期メモも区切られ次は1周期目に戻る", async (db, container) => {
+  const shopId = await createShop(db, { name: "店K", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-period-game").value = "100";
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  container.querySelector("#f-period-game").value = "80";
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  container.querySelector("#f-miko-total-game").value = "500";
+  container.querySelector("#miko-win-btn").click();
+  await wait();
+
+  assert.match(container.querySelector("#period-log").textContent, /初当たり1回目：3周期目/);
+  assert.match(container.querySelector("#period-log").textContent, /乙女アタック/);
+  assert.equal(container.querySelector("#period-current").textContent, "（次は1周期目）");
+
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].period_log.length, 3);
+  const lastPeriod = observations[0].period_log[2];
+  assert.equal(lastPeriod.hit, true);
+  assert.equal(lastPeriod.via, "miko");
+  assert.equal(typeof lastPeriod.linked_miko_id, "number");
+  assert.equal(observations[0].miko_log[0].id, lastPeriod.linked_miko_id);
+
+  // ×で当選メモを取り消すと、周期メモ側の自動区切りも一緒に消えて元に戻る。
+  container.querySelector('.miko-del[data-index="0"]').click();
+  await wait();
+  assert.equal(container.querySelector("#period-current").textContent, "（次は3周期目）");
+  const after = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(after[0].period_log.length, 2);
+  assert.equal(after[0].miko_log.length, 0);
+});
+
+await test("観測記録フォーム: 通常ゲーム数と総ゲーム数を分けて記録できる。総ゲーム数が通常を下回るとエラー", async (db, container) => {
+  const shopId = await createShop(db, { name: "店L", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-game-count").value = "1000";
+  container.querySelector("#f-total-game-count").value = "1200";
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+
+  let observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].game_count, 1000);
+  assert.equal(observations[0].total_game_count, 1200);
+
+  await renderSettingObservationForm(container, db, { observationId: observations[0].id });
+  container.querySelector("#f-total-game-count").value = "500";
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+
+  assert.match(container.textContent, /総ゲーム数が通常ゲーム数を下回っています/);
 });
 
 await test("観測記録フォーム: 巫女ポイント0メモから到達回数・CZ当選回数が自動集計される（カンスケ中は除外）", async (db, container) => {

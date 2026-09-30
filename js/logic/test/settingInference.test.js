@@ -158,6 +158,29 @@ test("summarizeMikoLog: カンスケ中は母数から除外する", () => {
   assert.equal(m.reachCount, 2);
   assert.equal(m.winCount, 1);
   assert.equal(m.kansukeCount, 1);
+  assert.equal(m.averageInterval, 300); // (700-300 + 900-700) / 2
+});
+
+test("summarizeMikoLog: 総G数が空欄の回は間隔計算から除外し、1件以下ならnull", () => {
+  const single = summarizeMikoLog([{ total_game: 300, won: false, kansuke: false }]);
+  assert.equal(single.averageInterval, null);
+
+  const withBlank = summarizeMikoLog([
+    { total_game: 300, won: false, kansuke: false },
+    { total_game: null, won: false, kansuke: false },
+    { total_game: 900, won: true, kansuke: false },
+  ]);
+  assert.equal(withBlank.averageInterval, 600); // 総G数ありの回（300→900）だけを見る
+});
+
+test("buildEstimate: 総ゲーム数は参考値として通すだけで、推定には使わない", () => {
+  const withTotal = buildEstimate({ game_count: 1000, at_count: 4, total_game_count: 1200 });
+  assert.equal(withTotal.totalGameCount, 1200);
+
+  const withoutTotal = buildEstimate({ game_count: 1000, at_count: 4 });
+  assert.equal(withoutTotal.totalGameCount, null);
+  // 総ゲーム数の有無で推定尤度が変わらないことを確認する。
+  assert.deepEqual(withTotal.likelihoods, withoutTotal.likelihoods);
 });
 
 test("buildEstimate: ボーナス直撃は空欄なら推定に使わず、入力すれば使う", () => {

@@ -437,16 +437,26 @@ function toOptionalNonNegativeInt(value) {
   return Number.isInteger(n) && n >= 0 ? n : null;
 }
 
-/** 周期メモ（[{display_game, hit}]）を保存用に正規化する。 */
+/**
+ * 周期メモ（[{display_game, hit, via?, linked_miko_id?}]）を保存用に正規化する。
+ * via:"miko" は、巫女ポイント0メモ側の当選をきっかけに画面が自動で追加した区切りエントリ（周期のリセット用）。
+ * linked_miko_idは、対応する巫女ポイント0メモのエントリのid（削除・取消を連動させるため）。
+ */
 function normalizePeriodLog(log) {
   if (!Array.isArray(log)) return [];
-  return log.map((e) => ({ display_game: toOptionalNonNegativeInt(e.display_game), hit: Boolean(e.hit) }));
+  return log.map((e) => ({
+    display_game: toOptionalNonNegativeInt(e.display_game),
+    hit: Boolean(e.hit),
+    via: e.via === "miko" ? "miko" : null,
+    linked_miko_id: e.linked_miko_id ?? null,
+  }));
 }
 
-/** 巫女ポイント0メモ（[{total_game, won, kansuke}]）を保存用に正規化する。 */
+/** 巫女ポイント0メモ（[{id, total_game, won, kansuke}]）を保存用に正規化する。idは周期メモとの連動に使う。 */
 function normalizeMikoLog(log) {
   if (!Array.isArray(log)) return [];
   return log.map((e) => ({
+    id: e.id ?? null,
     total_game: toOptionalNonNegativeInt(e.total_game),
     won: Boolean(e.won),
     kansuke: Boolean(e.kansuke),
@@ -466,8 +476,14 @@ function normalizeStrapCounts(counts) {
 }
 
 function buildSettingObservationFields(form) {
-  const gameCount = parseIntField(form.game_count, "消化ゲーム数", { required: false, minimum: 0 });
+  const gameCount = parseIntField(form.game_count, "通常ゲーム数", { required: false, minimum: 0 });
   const atCount = parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
+  // 総ゲーム数（AT消化分も含む）は空欄＝「記録していない」としてnullのまま保存する（推定には使わない）。
+  const totalRaw = form.total_game_count;
+  const totalGameCount =
+    totalRaw === null || totalRaw === undefined || String(totalRaw).trim() === ""
+      ? null
+      : parseIntField(String(totalRaw), "総ゲーム数", { required: false, minimum: 0 });
   const mikoReachCount = parseIntField(form.miko_reach_count, "巫女ポイント0到達回数", { required: false, minimum: 0 });
   const czWinCount = parseIntField(form.cz_win_count, "CZ当選回数", { required: false, minimum: 0 });
   // ボーナス直撃は空欄＝「数えていない」としてnullのまま保存する（推定に使わないため）。
@@ -478,10 +494,13 @@ function buildSettingObservationFields(form) {
       : parseIntField(String(bonusRaw), "ボーナス直撃回数", { required: false, minimum: 0 });
 
   if (atCount > gameCount) {
-    throw new ValidationError("AT当選回数が消化ゲーム数を超えています。");
+    throw new ValidationError("AT当選回数が通常ゲーム数を超えています。");
   }
   if (czWinCount > mikoReachCount) {
     throw new ValidationError("CZ当選回数が巫女ポイント0到達回数を超えています。");
+  }
+  if (totalGameCount !== null && totalGameCount < gameCount) {
+    throw new ValidationError("総ゲーム数が通常ゲーム数を下回っています。");
   }
 
   return {
@@ -491,6 +510,7 @@ function buildSettingObservationFields(form) {
     play_date: requireDate(form.play_date, "日付"),
     machine_number: (form.machine_number ?? "").toString().trim(),
     game_count: gameCount,
+    total_game_count: totalGameCount,
     at_count: atCount,
     miko_reach_count: mikoReachCount,
     cz_win_count: czWinCount,
