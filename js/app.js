@@ -135,6 +135,15 @@ addRoute("/setting-tool/:id/edit", async (container, params) => {
 const appContainer = document.getElementById("app");
 startRouter(appContainer);
 
+// 数値入力欄はフォーカス時に中身を全選択する。デフォルトで0が入っている欄に直接入力しようとすると、
+// カーソルが「0」の左側に来て「05」のようになってしまう（特にiPhone Safari）ことへの対策。
+// 全画面共通の挙動にしたいので、個々のビューではなくここで一括して仕込む。
+document.addEventListener("focusin", (e) => {
+  if (e.target instanceof HTMLInputElement && e.target.type === "number") {
+    e.target.select();
+  }
+});
+
 // オフラインで動くようにするためのService Worker登録（対応ブラウザのみ、失敗しても致命的ではない）。
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
