@@ -469,6 +469,20 @@ function normalizeMikoLog(log) {
   });
 }
 
+/** AT中CZメモ（本能寺の変・カシンバトル、[{id, kind, trigger, at_game, won}]）を保存用に正規化する。 */
+function normalizeAtCzLog(log) {
+  if (!Array.isArray(log)) return [];
+  return log
+    .filter((e) => e && typeof e.kind === "string" && e.kind !== "")
+    .map((e) => ({
+      id: e.id ?? null,
+      kind: String(e.kind),
+      trigger: String(e.trigger ?? ""),
+      at_game: toOptionalNonNegativeInt(e.at_game),
+      won: Boolean(e.won),
+    }));
+}
+
 /** 乙女ストラップ等の出現回数（{キー: 回数}）を保存用に正規化する。 */
 function normalizeStrapCounts(counts) {
   const result = {};
@@ -499,6 +513,13 @@ function buildSettingObservationFields(form) {
       ? null
       : parseIntField(String(bonusRaw), "ボーナス直撃回数", { required: false, minimum: 0 });
 
+  // AT中ゲーム数は空欄＝「手で数えていない」（画面側で総ゲーム数−通常ゲーム数の目安を使う）。
+  const atGameRaw = form.at_game_count;
+  const atGameCount =
+    atGameRaw === null || atGameRaw === undefined || String(atGameRaw).trim() === ""
+      ? null
+      : parseIntField(String(atGameRaw), "AT中ゲーム数", { required: false, minimum: 0 });
+
   if (atCount > gameCount) {
     throw new ValidationError("AT当選回数が通常ゲーム数を超えています。");
   }
@@ -526,6 +547,8 @@ function buildSettingObservationFields(form) {
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
     period_log: normalizePeriodLog(form.period_log),
     miko_log: normalizeMikoLog(form.miko_log),
+    at_game_count: atGameCount,
+    at_cz_log: normalizeAtCzLog(form.at_cz_log),
     hint_flags: Array.isArray(form.hint_flags) ? form.hint_flags.map(String) : [],
     strap_counts: normalizeStrapCounts(form.strap_counts),
     memo: (form.memo ?? "").toString().trim(),

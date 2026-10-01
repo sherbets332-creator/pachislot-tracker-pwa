@@ -11,6 +11,7 @@ import {
   CZ_WIN_RATE,
   summarizePeriodLog,
   summarizeMikoLog,
+  summarizeAtCzLog,
 } from "../settingReference/sengokuOtome5.js";
 import { getReferenceByMachineName, getReferenceByKey } from "../settingReference/index.js";
 
@@ -171,6 +172,28 @@ test("summarizeMikoLog: 乙女アタック当選のうちAT当選した回数を
   assert.equal(m.winCount, 3); // CZ当選率の分子はATの成否に関係なく乙女アタック当選
   assert.equal(m.czWinTotal, 3);
   assert.equal(m.atWinCount, 2);
+});
+
+test("summarizeAtCzLog: 本能寺の変・カシンバトルを種類ごと・契機ごとに集計し、本能寺だけ突入率を出す", () => {
+  const log = [
+    { kind: "honnoji", trigger: "game", won: true },
+    { kind: "honnoji", trigger: "game", won: false },
+    { kind: "honnoji", trigger: "rare", won: true },
+    { kind: "kashin", trigger: "rare", won: false },
+  ];
+  const [honnoji, kashin] = summarizeAtCzLog(log, { atGameCount: 300 });
+  assert.equal(honnoji.count, 3);
+  assert.equal(honnoji.wins, 2);
+  assert.deepEqual(
+    honnoji.byTrigger.map((t) => [t.trigger, t.count, t.wins]),
+    [["game", 2, 1], ["rare", 1, 1]]
+  );
+  assert.equal(honnoji.entryRate, 3 / 300);
+  assert.equal(kashin.count, 1);
+  assert.equal(kashin.entryRate, null, "カシンバトルは上位ATのゲーム数が取れないので突入率を出さない");
+
+  const [noGames] = summarizeAtCzLog(log, { atGameCount: null });
+  assert.equal(noGames.entryRate, null);
 });
 
 test("summarizeMikoLog: 総G数が空欄の回は間隔計算から除外し、1件以下ならnull", () => {

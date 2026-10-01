@@ -145,6 +145,73 @@ export function summarizeMikoLog(mikoLog = []) {
 }
 
 /**
+ * AT中のCZ（記録用）。本能寺の変は通常AT中、カシンバトルは上位AT（真強カワラッシュ）中だけに起きるので、
+ * 画面では切り替えではなく別ブロック・別ボタンにしている。
+ * 突入率・勝利期待度とも設定差ありとされるが、公開されている数値は設定1のみ（出典: ななプレス・
+ * ちょんぼりすた・DMMぱちタウン、2026-10時点）。設定2〜6が不明なので推定（尤度）には使わず参考表示だけ。
+ * 契機を分けて記録するのは、レア役契機はレア役を引けたかの運に左右され、G数契機（20G・以降50Gごと）と
+ * 混ぜると数字の意味が変わるため。ミツヒデ高確中は突入しやすい特別な状態なのでさらに分ける。
+ * setting1EntryRate: AT中1Gあたりの突入率（設定1）。カシンバトルは上位ATのゲーム数が取れないので無し。
+ */
+export const AT_CZ_KINDS = [
+  {
+    key: "honnoji",
+    label: "本能寺の変",
+    setting1EntryRate: 1 / 114.8,
+    setting1WinRate: 0.5,
+    triggers: [
+      { value: "game", label: "G数" },
+      { value: "rare", label: "レア役" },
+      { value: "mitsuhide", label: "ミツヒデ高確" },
+      { value: "zekkei", label: "絶景チャンス" },
+    ],
+    recordAtGame: true,
+  },
+  {
+    key: "kashin",
+    label: "カシンバトル",
+    setting1EntryRate: null,
+    setting1WinRate: 0.5,
+    triggers: [
+      { value: "game", label: "G数" },
+      { value: "rare", label: "レア役" },
+      { value: "other", label: "その他" },
+    ],
+    recordAtGame: false,
+  },
+];
+
+/**
+ * AT中CZメモ（[{id, kind, trigger, at_game, won}]）をCZの種類ごと・契機ごとに集計する。
+ * atGameCount（AT中ゲーム数）が分かれば、本能寺の変の突入率（参考）も出す。
+ */
+export function summarizeAtCzLog(atCzLog = [], { atGameCount = null } = {}) {
+  return AT_CZ_KINDS.map((kind) => {
+    const entries = atCzLog.filter((e) => e.kind === kind.key);
+    const wins = entries.filter((e) => e.won).length;
+    const byTrigger = kind.triggers
+      .map((t) => {
+        const ts = entries.filter((e) => e.trigger === t.value);
+        return { trigger: t.value, label: t.label, count: ts.length, wins: ts.filter((e) => e.won).length };
+      })
+      .filter((t) => t.count > 0);
+    const entryRate =
+      kind.setting1EntryRate && atGameCount && atGameCount > 0 && entries.length > 0 ? entries.length / atGameCount : null;
+    return {
+      key: kind.key,
+      label: kind.label,
+      count: entries.length,
+      wins,
+      winRate: entries.length > 0 ? wins / entries.length : null,
+      byTrigger,
+      entryRate,
+      setting1EntryRate: kind.setting1EntryRate,
+      setting1WinRate: kind.setting1WinRate,
+    };
+  });
+}
+
+/**
  * 遊技中に見かけたらチェックする設定示唆（出典: 1geki.jp、2026-09時点）。
  * minSetting: 見えたら「設定◯以上濃厚」。parity: 奇数/偶数示唆（確定ではない）。
  */

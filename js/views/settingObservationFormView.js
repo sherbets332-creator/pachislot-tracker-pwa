@@ -152,6 +152,47 @@ function renderMikoSection(mikoLog, summary) {
   return rows + atStats + stats;
 }
 
+/**
+ * AT中ゲーム数：手入力があればそれ、無ければ「総ゲーム数−通常ゲーム数」を目安として使う
+ * （ボーナス・CZ中のゲーム数も含むので、実際より少し多めになる）。
+ */
+function resolveAtGameCount(container) {
+  const manual = container.querySelector("#f-at-game-count")?.value ?? "";
+  if (manual !== "") return { value: Number(manual), estimated: false };
+  const total = container.querySelector("#f-total-game-count").value;
+  const normal = container.querySelector("#f-game-count").value;
+  if (total === "" || normal === "") return { value: null, estimated: true };
+  const diff = Number(total) - Number(normal);
+  return { value: diff > 0 ? diff : null, estimated: true };
+}
+
+function renderAtCzSection(kind, summary, entries, atGame) {
+  const triggerLabel = (_kindKey, value) => kind.triggers.find((t) => t.value === value)?.label ?? value;
+  const rows = entries
+    .map(
+      (e, i) => `
+        <div class="small" style="display:flex;align-items:center;gap:8px;">
+          <span>${i + 1}.</span>
+          <span>${escapeHtml(triggerLabel(e.kind, e.trigger))}</span>
+          ${e.at_game !== null && e.at_game !== undefined ? `<span>AT${e.at_game}G</span>` : ""}
+          <strong>${e.won ? "勝利" : "敗北"}</strong>
+          <button type="button" class="btn btn-sm atcz-del" data-id="${e.id}" style="margin-left:auto;">×</button>
+        </div>`
+    )
+    .join("");
+  if (summary.count === 0) return "";
+  const byTrigger = summary.byTrigger.map((t) => `${escapeHtml(t.label)} ${t.count}回中${t.wins}勝`).join("／");
+  const entryLine =
+    summary.setting1EntryRate && atGame.value
+      ? `<div class="small muted">突入率${atGame.estimated ? "（目安）" : ""}：${summary.entryRate ? formatRateAsFraction(summary.entryRate) : "-"}
+           （AT中${atGame.value}G、設定1は${formatRateAsFraction(summary.setting1EntryRate)}）</div>`
+      : "";
+  return `${rows}
+    <div class="small" style="margin-top:6px;">合計 ${summary.count}回中${summary.wins}勝（勝率${formatPercent(summary.winRate)}、設定1は約${Math.round(summary.setting1WinRate * 100)}%）</div>
+    <div class="small muted">${byTrigger}</div>
+    ${entryLine}`;
+}
+
 function readForm(container, logs = null) {
   const val = (id) => container.querySelector(`#${id}`).value;
   return {
@@ -167,6 +208,7 @@ function readForm(container, logs = null) {
     max_ending_stamp: val("f-max-ending-stamp"),
     max_payout_over: val("f-max-payout-over"),
     ceiling_reset_hint: container.querySelector("#f-ceiling-reset-hint").checked,
+    at_game_count: container.querySelector("#f-at-game-count")?.value ?? "",
     memo: val("f-memo"),
   };
 }
@@ -219,6 +261,8 @@ export async function renderSettingObservationForm(
     miko_log: observation?.miko_log ?? [],
     hint_flags: observation?.hint_flags ?? [],
     strap_counts: observation?.strap_counts ?? {},
+    at_game_count: observation?.at_game_count ?? "", // 空欄＝総ゲーム数−通常ゲーム数の目安を使う
+    at_cz_log: observation?.at_cz_log ?? [],
     memo: observation?.memo ?? "",
   };
   // 周期メモ・巫女ポイント0メモ・示唆チェック・ストラップ回数は画面上で追記していくので、手元に持つ。
@@ -227,7 +271,9 @@ export async function renderSettingObservationForm(
     miko_log: [...(values.miko_log || [])],
     hint_flags: [...(values.hint_flags || [])],
     strap_counts: { ...(values.strap_counts || {}) },
+    at_cz_log: [...(values.at_cz_log || [])],
   };
+  const atCzKinds = reference.AT_CZ_KINDS || [];
   const strapModes = reference.STRAP_MODES || [];
   const settingHints = reference.SETTING_HINTS || [];
   const hintGroups = [...new Set(settingHints.map((h) => h.group))];
@@ -326,6 +372,47 @@ export async function renderSettingObservationForm(
           乙女アタック当選率の解析値はカンスケ滞在時を除いた数値のため、カンスケ中の分は判別から外します。</div>
         <div id="miko-log"></div>
       </div>
+
+      ${
+        atCzKinds.length
+          ? `<div class="card" id="atcz-card">
+        <h2 style="margin-top:0;">AT中のCZメモ</h2>
+        <div class="hint small muted">記録用です。設定1以外の数値が公開されていないので推定には使わず、設定1と並べて表示するだけです。</div>
+        <div class="field">
+          <label>AT中ゲーム数（任意）</label>
+          <input type="number" id="f-at-game-count" min="0" inputmode="numeric" placeholder="空欄なら総ゲーム数−通常ゲーム数を目安に使う" value="${values.at_game_count ?? ""}">
+          <div class="hint">空欄の場合は「総ゲーム数−通常ゲーム数」（打-WINから読み込んだ値など）を目安に使います。ボーナス・CZ中も含むので実際より少し多めです。</div>
+        </div>
+        ${atCzKinds
+          .map(
+            (kind) => `
+          <div style="margin-top:10px;border-top:1px solid #ddd;padding-top:8px;">
+            <div style="font-weight:bold;">${escapeHtml(kind.label)}</div>
+            <div class="field" style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+              <div style="min-width:7em;">
+                <label class="small">契機</label>
+                <select id="f-atcz-trigger-${kind.key}">${kind.triggers
+                  .map((t) => `<option value="${t.value}">${escapeHtml(t.label)}</option>`)
+                  .join("")}</select>
+              </div>
+              ${
+                kind.recordAtGame
+                  ? `<div style="flex:1;min-width:6em;">
+                <label class="small">その時のAT中G数（任意）</label>
+                <input type="number" id="f-atcz-game-${kind.key}" min="0" inputmode="numeric" placeholder="例: 70">
+              </div>`
+                  : ""
+              }
+              <button type="button" class="btn atcz-btn" data-kind="${kind.key}" data-won="0">敗北</button>
+              <button type="button" class="btn btn-primary atcz-btn" data-kind="${kind.key}" data-won="1">勝利</button>
+            </div>
+            <div id="atcz-log-${kind.key}"></div>
+          </div>`
+          )
+          .join("")}
+      </div>`
+          : ""
+      }
 
       ${
         strapModes.length
@@ -446,7 +533,27 @@ export async function renderSettingObservationForm(
         await onLogChanged();
       })
     );
+    refreshAtCz();
     updateEstimate();
+  }
+
+  /** AT中CZメモ（本能寺の変・カシンバトル）の表示を描き直す。 */
+  function refreshAtCz() {
+    if (!atCzKinds.length) return;
+    const atGame = resolveAtGameCount(container);
+    const summaries = reference.summarizeAtCzLog(logs.at_cz_log, { atGameCount: atGame.value });
+    atCzKinds.forEach((kind) => {
+      const summary = summaries.find((s) => s.key === kind.key);
+      const entries = logs.at_cz_log.filter((e) => e.kind === kind.key);
+      $(`atcz-log-${kind.key}`).innerHTML = renderAtCzSection(kind, summary, entries, atGame);
+    });
+    container.querySelectorAll(".atcz-del").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const index = logs.at_cz_log.findIndex((e) => String(e.id) === btn.dataset.id);
+        if (index !== -1) logs.at_cz_log.splice(index, 1);
+        await onLogChanged();
+      })
+    );
   }
 
   /**
@@ -522,6 +629,36 @@ export async function renderSettingObservationForm(
   }
   $("miko-win-btn").addEventListener("click", () => addMiko(true, true));
   $("miko-cz-only-btn").addEventListener("click", () => addMiko(true, false));
+
+  // AT中CZメモ：契機を選んで勝利/敗北を押すたびに1件追加して自動保存。
+  container.querySelectorAll(".atcz-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const kindKey = btn.dataset.kind;
+      const gameInput = $(`f-atcz-game-${kindKey}`);
+      const raw = gameInput ? gameInput.value : "";
+      logs.at_cz_log.push({
+        id: Date.now(),
+        kind: kindKey,
+        trigger: $(`f-atcz-trigger-${kindKey}`).value,
+        at_game: raw === "" ? null : Number(raw),
+        won: btn.dataset.won === "1",
+      });
+      if (gameInput) gameInput.value = "";
+      await onLogChanged();
+    })
+  );
+  if ($("f-at-game-count")) {
+    // 打-WIN読み込み時はchangeイベントで通知されるので、inputとchangeの両方で描き直す。
+    ["f-at-game-count", "f-game-count", "f-total-game-count"].forEach((id) => {
+      $(id).addEventListener("input", refreshAtCz);
+      $(id).addEventListener("change", refreshAtCz);
+    });
+    // 手入力のAT中ゲーム数は確定時に自動保存（遊技中に閉じても残るように）。
+    $("f-at-game-count").addEventListener("change", async () => {
+      refreshAtCz();
+      await autoSave();
+    });
+  }
 
   // 乙女ストラップ：＋/−で回数を数え、そのたびに自動保存。
   async function changeStrap(key, delta) {
