@@ -166,31 +166,42 @@ function resolveAtGameCount(container) {
   return { value: diff > 0 ? diff : null, estimated: true };
 }
 
-function renderAtCzSection(kind, summary, entries, atGame) {
-  const triggerLabel = (_kindKey, value) => kind.triggers.find((t) => t.value === value)?.label ?? value;
+/** AT中CZメモ：本能寺の変・カシンバトルを1つのリストにまとめて表示し、その下に種類ごとの集計を出す。 */
+function renderAtCzSection(reference, entries, summaries, atGame) {
+  if (entries.length === 0) return "";
+  const kindLabel = (key) => reference.AT_CZ_KINDS.find((k) => k.key === key)?.shortLabel ?? key;
+  const triggerLabel = (value) => reference.AT_CZ_TRIGGERS.find((t) => t.value === value)?.label ?? value;
   const rows = entries
     .map(
       (e, i) => `
         <div class="small" style="display:flex;align-items:center;gap:8px;">
           <span>${i + 1}.</span>
-          <span>${escapeHtml(triggerLabel(e.kind, e.trigger))}</span>
+          <span>${escapeHtml(kindLabel(e.kind))}</span>
+          <span class="muted">${escapeHtml(triggerLabel(e.trigger))}</span>
           ${e.at_game !== null && e.at_game !== undefined ? `<span>AT${e.at_game}G</span>` : ""}
           <strong>${e.won ? "勝利" : "敗北"}</strong>
           <button type="button" class="btn btn-sm atcz-del" data-id="${e.id}" style="margin-left:auto;">×</button>
         </div>`
     )
     .join("");
-  if (summary.count === 0) return "";
-  const byTrigger = summary.byTrigger.map((t) => `${escapeHtml(t.label)} ${t.count}回中${t.wins}勝`).join("／");
-  const entryLine =
-    summary.setting1EntryRate && atGame.value
-      ? `<div class="small muted">突入率${atGame.estimated ? "（目安）" : ""}：${summary.entryRate ? formatRateAsFraction(summary.entryRate) : "-"}
-           （AT中${atGame.value}G、設定1は${formatRateAsFraction(summary.setting1EntryRate)}）</div>`
-      : "";
-  return `${rows}
-    <div class="small" style="margin-top:6px;">合計 ${summary.count}回中${summary.wins}勝（勝率${formatPercent(summary.winRate)}、設定1は約${Math.round(summary.setting1WinRate * 100)}%）</div>
-    <div class="small muted">${byTrigger}</div>
-    ${entryLine}`;
+  const stats = summaries
+    .filter((s) => s.count > 0)
+    .map((s) => {
+      const byTrigger = s.byTrigger.map((t) => `${escapeHtml(t.label)} ${t.count}回中${t.wins}勝`).join("／");
+      const entryLine =
+        s.setting1EntryRate && atGame.value
+          ? `<div class="small muted">突入率${atGame.estimated ? "（目安）" : ""}：${s.entryRate ? formatRateAsFraction(s.entryRate) : "-"}
+               （AT中${atGame.value}G、設定1は${formatRateAsFraction(s.setting1EntryRate)}）</div>`
+          : "";
+      return `
+        <div id="atcz-summary-${s.key}" style="margin-top:6px;">
+          <div class="small"><strong>${escapeHtml(s.label)}</strong>：${s.count}回中${s.wins}勝（勝率${formatPercent(s.winRate)}、設定1は約${Math.round(s.setting1WinRate * 100)}%）</div>
+          <div class="small muted">${byTrigger}</div>
+          ${entryLine}
+        </div>`;
+    })
+    .join("");
+  return rows + stats;
 }
 
 function readForm(container, logs = null) {
@@ -383,33 +394,29 @@ export async function renderSettingObservationForm(
           <input type="number" id="f-at-game-count" min="0" inputmode="numeric" placeholder="空欄なら総ゲーム数−通常ゲーム数を目安に使う" value="${values.at_game_count ?? ""}">
           <div class="hint">空欄の場合は「総ゲーム数−通常ゲーム数」（打-WINから読み込んだ値など）を目安に使います。ボーナス・CZ中も含むので実際より少し多めです。</div>
         </div>
+        <div class="field" style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="min-width:7em;">
+            <label class="small">契機</label>
+            <select id="f-atcz-trigger">${(reference.AT_CZ_TRIGGERS || [])
+              .map((t) => `<option value="${t.value}">${escapeHtml(t.label)}</option>`)
+              .join("")}</select>
+          </div>
+          <div style="flex:1;min-width:6em;">
+            <label class="small">その時のAT中G数（任意）</label>
+            <input type="number" id="f-atcz-game" min="0" inputmode="numeric" placeholder="例: 70">
+          </div>
+        </div>
         ${atCzKinds
           .map(
             (kind) => `
-          <div style="margin-top:10px;border-top:1px solid #ddd;padding-top:8px;">
-            <div style="font-weight:bold;">${escapeHtml(kind.label)}</div>
-            <div class="field" style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
-              <div style="min-width:7em;">
-                <label class="small">契機</label>
-                <select id="f-atcz-trigger-${kind.key}">${kind.triggers
-                  .map((t) => `<option value="${t.value}">${escapeHtml(t.label)}</option>`)
-                  .join("")}</select>
-              </div>
-              ${
-                kind.recordAtGame
-                  ? `<div style="flex:1;min-width:6em;">
-                <label class="small">その時のAT中G数（任意）</label>
-                <input type="number" id="f-atcz-game-${kind.key}" min="0" inputmode="numeric" placeholder="例: 70">
-              </div>`
-                  : ""
-              }
-              <button type="button" class="btn atcz-btn" data-kind="${kind.key}" data-won="0">敗北</button>
-              <button type="button" class="btn btn-primary atcz-btn" data-kind="${kind.key}" data-won="1">勝利</button>
-            </div>
-            <div id="atcz-log-${kind.key}"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+            <div style="flex:1;">${escapeHtml(kind.label)}</div>
+            <button type="button" class="btn atcz-btn" data-kind="${kind.key}" data-won="0">${escapeHtml(kind.shortLabel)} 敗北</button>
+            <button type="button" class="btn btn-primary atcz-btn" data-kind="${kind.key}" data-won="1">${escapeHtml(kind.shortLabel)} 勝利</button>
           </div>`
           )
           .join("")}
+        <div id="atcz-log" style="margin-top:8px;"></div>
       </div>`
           : ""
       }
@@ -542,11 +549,7 @@ export async function renderSettingObservationForm(
     if (!atCzKinds.length) return;
     const atGame = resolveAtGameCount(container);
     const summaries = reference.summarizeAtCzLog(logs.at_cz_log, { atGameCount: atGame.value });
-    atCzKinds.forEach((kind) => {
-      const summary = summaries.find((s) => s.key === kind.key);
-      const entries = logs.at_cz_log.filter((e) => e.kind === kind.key);
-      $(`atcz-log-${kind.key}`).innerHTML = renderAtCzSection(kind, summary, entries, atGame);
-    });
+    $("atcz-log").innerHTML = renderAtCzSection(reference, logs.at_cz_log, summaries, atGame);
     container.querySelectorAll(".atcz-del").forEach((btn) =>
       btn.addEventListener("click", async () => {
         const index = logs.at_cz_log.findIndex((e) => String(e.id) === btn.dataset.id);
@@ -633,17 +636,15 @@ export async function renderSettingObservationForm(
   // AT中CZメモ：契機を選んで勝利/敗北を押すたびに1件追加して自動保存。
   container.querySelectorAll(".atcz-btn").forEach((btn) =>
     btn.addEventListener("click", async () => {
-      const kindKey = btn.dataset.kind;
-      const gameInput = $(`f-atcz-game-${kindKey}`);
-      const raw = gameInput ? gameInput.value : "";
+      const raw = $("f-atcz-game").value;
       logs.at_cz_log.push({
         id: Date.now(),
-        kind: kindKey,
-        trigger: $(`f-atcz-trigger-${kindKey}`).value,
+        kind: btn.dataset.kind,
+        trigger: $("f-atcz-trigger").value,
         at_game: raw === "" ? null : Number(raw),
         won: btn.dataset.won === "1",
       });
-      if (gameInput) gameInput.value = "";
+      $("f-atcz-game").value = "";
       await onLogChanged();
     })
   );

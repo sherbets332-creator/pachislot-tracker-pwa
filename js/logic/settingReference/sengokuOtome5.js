@@ -145,40 +145,26 @@ export function summarizeMikoLog(mikoLog = []) {
 }
 
 /**
- * AT中のCZ（記録用）。本能寺の変は通常AT中、カシンバトルは上位AT（真強カワラッシュ）中だけに起きるので、
- * 画面では切り替えではなく別ブロック・別ボタンにしている。
+ * AT中のCZ（記録用）。本能寺の変は通常AT中、カシンバトルは上位AT（真強カワラッシュ）中に起きる。
+ * 画面では1つのブロックにまとめ、契機は共通の選択肢（AT_CZ_TRIGGERS）から選び、種類×勝敗のボタンで記録する。
  * 突入率・勝利期待度とも設定差ありとされるが、公開されている数値は設定1のみ（出典: ななプレス・
  * ちょんぼりすた・DMMぱちタウン、2026-10時点）。設定2〜6が不明なので推定（尤度）には使わず参考表示だけ。
  * 契機を分けて記録するのは、レア役契機はレア役を引けたかの運に左右され、G数契機（20G・以降50Gごと）と
- * 混ぜると数字の意味が変わるため。ミツヒデ高確中は突入しやすい特別な状態なのでさらに分ける。
+ * 混ぜると数字の意味が変わるため。高確中（通常ATのミツヒデ高確、真強カワラッシュ中の高確）は突入しやすい
+ * 特別な状態なのでさらに分ける。
  * setting1EntryRate: AT中1Gあたりの突入率（設定1）。カシンバトルは上位ATのゲーム数が取れないので無し。
  */
+export const AT_CZ_TRIGGERS = [
+  { value: "game", label: "G数" },
+  { value: "rare", label: "レア役" },
+  { value: "mitsuhide", label: "高確中" }, // 値は旧名（ミツヒデ高確）のまま。真強カワラッシュ中の高確も含む
+  { value: "zekkei", label: "絶景チャンス" },
+  { value: "other", label: "その他" },
+];
+
 export const AT_CZ_KINDS = [
-  {
-    key: "honnoji",
-    label: "本能寺の変",
-    setting1EntryRate: 1 / 114.8,
-    setting1WinRate: 0.5,
-    triggers: [
-      { value: "game", label: "G数" },
-      { value: "rare", label: "レア役" },
-      { value: "mitsuhide", label: "ミツヒデ高確" },
-      { value: "zekkei", label: "絶景チャンス" },
-    ],
-    recordAtGame: true,
-  },
-  {
-    key: "kashin",
-    label: "カシンバトル",
-    setting1EntryRate: null,
-    setting1WinRate: 0.5,
-    triggers: [
-      { value: "game", label: "G数" },
-      { value: "rare", label: "レア役" },
-      { value: "other", label: "その他" },
-    ],
-    recordAtGame: false,
-  },
+  { key: "honnoji", label: "本能寺の変", shortLabel: "本能寺", setting1EntryRate: 1 / 114.8, setting1WinRate: 0.5 },
+  { key: "kashin", label: "カシンバトル", shortLabel: "カシン", setting1EntryRate: null, setting1WinRate: 0.5 },
 ];
 
 /**
@@ -189,7 +175,7 @@ export function summarizeAtCzLog(atCzLog = [], { atGameCount = null } = {}) {
   return AT_CZ_KINDS.map((kind) => {
     const entries = atCzLog.filter((e) => e.kind === kind.key);
     const wins = entries.filter((e) => e.won).length;
-    const byTrigger = kind.triggers
+    const byTrigger = AT_CZ_TRIGGERS
       .map((t) => {
         const ts = entries.filter((e) => e.trigger === t.value);
         return { trigger: t.value, label: t.label, count: ts.length, wins: ts.filter((e) => e.won).length };

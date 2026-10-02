@@ -316,40 +316,45 @@ await test("観測記録フォーム: AT中CZメモ（本能寺の変・カシ�
   container.querySelector("#f-game-count").value = "1000";
   container.querySelector("#f-total-game-count").value = "1230";
 
-  container.querySelector("#f-atcz-trigger-honnoji").value = "rare";
-  container.querySelector("#f-atcz-game-honnoji").value = "45";
+  // 契機・AT中G数は共通の入力欄。種類はボタンで決まる（1ブロックにまとめた形）
+  container.querySelector("#f-atcz-trigger").value = "rare";
+  container.querySelector("#f-atcz-game").value = "45";
   container.querySelector('.atcz-btn[data-kind="honnoji"][data-won="1"]').click();
   await wait();
-  container.querySelector("#f-atcz-trigger-honnoji").value = "game";
+  container.querySelector("#f-atcz-trigger").value = "game";
   container.querySelector('.atcz-btn[data-kind="honnoji"][data-won="0"]').click();
   await wait();
-  container.querySelector("#f-atcz-trigger-kashin").value = "game";
+  container.querySelector("#f-atcz-trigger").value = "mitsuhide"; // 真強カワラッシュ中の高確
   container.querySelector('.atcz-btn[data-kind="kashin"][data-won="1"]').click();
   await wait();
 
-  const honnojiText = container.querySelector("#atcz-log-honnoji").textContent;
-  assert.match(honnojiText, /合計 2回中1勝/);
+  const honnojiText = container.querySelector("#atcz-summary-honnoji").textContent;
+  assert.match(honnojiText, /2回中1勝/);
   assert.match(honnojiText, /レア役 1回中1勝/);
-  assert.match(honnojiText, /AT45G/);
   assert.match(honnojiText, /突入率（目安）：1\/115\.0/); // 230G / 2回、総1230−通常1000
-  const kashinText = container.querySelector("#atcz-log-kashin").textContent;
-  assert.match(kashinText, /合計 1回中1勝/);
+  const kashinText = container.querySelector("#atcz-summary-kashin").textContent;
+  assert.match(kashinText, /1回中1勝/);
+  assert.match(kashinText, /高確中 1回中1勝/);
   assert.doesNotMatch(kashinText, /突入率/);
+  const listText = container.querySelector("#atcz-log").textContent;
+  assert.match(listText, /本能寺/);
+  assert.match(listText, /カシン/);
+  assert.match(listText, /AT45G/);
 
   // 手入力のAT中ゲーム数があればそちらを使う（目安表記は消える）
   container.querySelector("#f-at-game-count").value = "400";
   fireEvent(container.querySelector("#f-at-game-count"), "input");
-  assert.match(container.querySelector("#atcz-log-honnoji").textContent, /突入率：1\/200\.0/);
+  assert.match(container.querySelector("#atcz-summary-honnoji").textContent, /突入率：1\/200\.0/);
 
   let observations = await listSettingObservations(db, { shopId, machineId });
   assert.equal(observations[0].at_cz_log.length, 3);
   assert.deepEqual(
     observations[0].at_cz_log.map((e) => [e.kind, e.trigger, e.at_game, e.won]),
-    [["honnoji", "rare", 45, true], ["honnoji", "game", null, false], ["kashin", "game", null, true]]
+    [["honnoji", "rare", 45, true], ["honnoji", "game", null, false], ["kashin", "mitsuhide", null, true]]
   );
 
-  // ×で削除 → 自動保存
-  container.querySelector("#atcz-log-kashin .atcz-del").click();
+  // ×で削除（3件目＝カシンバトル） → 自動保存
+  container.querySelectorAll("#atcz-log .atcz-del")[2].click();
   await wait();
   observations = await listSettingObservations(db, { shopId, machineId });
   assert.equal(observations[0].at_cz_log.length, 2);
