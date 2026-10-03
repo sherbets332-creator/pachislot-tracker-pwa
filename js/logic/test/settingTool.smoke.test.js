@@ -566,4 +566,93 @@ await test("観測記録フォーム: カバネリの手入力・周期・景之
   assert.match(container.querySelector("#kage-log").textContent, /裏景之ST/);
 });
 
+await test("観測記録フォーム: 東京喰種専用項目を表示し、既存2機種の項目は変えない", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
+  const ghoulId = await createMachine(db, { name: "L 東京喰種" });
+  const kabaneriId = await createMachine(db, { name: "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦" });
+  const otomeId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: ghoulId });
+  for (const id of [
+    "f-at-count",
+    "f-cz-remi-count",
+    "f-cz-rize-count",
+    "f-episode-count",
+    "f-replay-direct-count",
+    "f-lower-replay-count",
+    "cz100-card",
+    "pullback-card",
+  ]) {
+    assert.ok(container.querySelector(`#${id}`), `${id} が表示される`);
+  }
+  assert.equal(container.querySelector("#f-at-count").value, "", "東京喰種のAT初当たりは未計測なら空欄");
+  assert.equal(container.querySelector("#period-card"), null);
+  assert.equal(container.querySelector("#kage-card"), null);
+  assert.equal(container.querySelector("#miko-card"), null);
+  assert.equal(container.querySelector("#dwin-card"), null);
+  assert.equal(container.querySelector("#f-max-ending-stamp"), null);
+  assert.match(container.textContent, /各確率の分母は未確認/);
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: kabaneriId });
+  assert.ok(container.querySelector("#f-bonus-count"));
+  assert.ok(container.querySelector("#period-card"));
+  assert.ok(container.querySelector("#kage-card"));
+  assert.equal(container.querySelector("#cz100-card"), null);
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: otomeId });
+  assert.ok(container.querySelector("#f-bonus-direct-count"));
+  assert.ok(container.querySelector("#miko-card"));
+  assert.ok(container.querySelector("#dwin-card"));
+  assert.equal(container.querySelector("#cz100-card"), null);
+});
+
+await test("観測記録フォーム: 東京喰種の手入力と成否ログを保存して再表示できる", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L 東京喰種" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-play-date").value = "2026-10-03";
+  container.querySelector("#f-game-count").value = "8000";
+  container.querySelector("#f-total-game-count").value = "10000";
+  container.querySelector("#f-at-count").value = "30";
+  container.querySelector("#f-cz-remi-count").value = "31";
+  container.querySelector("#f-cz-rize-count").value = "7";
+  container.querySelector("#f-episode-count").value = "3";
+  container.querySelector("#f-replay-direct-count").value = "1";
+  container.querySelector("#f-lower-replay-count").value = "8";
+
+  container.querySelector('.binary-log-btn[data-log-key="cz100_log"][data-win="1"]').click();
+  await wait();
+  container.querySelector('.binary-log-btn[data-log-key="cz100_log"][data-win="0"]').click();
+  await wait();
+  container.querySelector('.binary-log-btn[data-log-key="pullback_log"][data-win="0"]').click();
+  await wait();
+  container.querySelector('.binary-log-btn[data-log-key="pullback_log"][data-win="1"]').click();
+  await wait();
+
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].machine_key, "tokyo_ghoul");
+  assert.equal(observations[0].at_count, 30);
+  assert.equal(observations[0].cz_remi_count, 31);
+  assert.equal(observations[0].cz_rize_count, 7);
+  assert.equal(observations[0].episode_count, 3);
+  assert.equal(observations[0].replay_direct_count, 1);
+  assert.equal(observations[0].lower_replay_count, 8);
+  assert.deepEqual(observations[0].cz100_log.map((entry) => entry.win), [true, false]);
+  assert.deepEqual(observations[0].pullback_log.map((entry) => entry.win), [false, true]);
+
+  await renderSettingObservationForm(container, db, { observationId: observations[0].id });
+  assert.equal(container.querySelector("#f-at-count").value, "30");
+  assert.equal(container.querySelector("#f-cz-remi-count").value, "31");
+  assert.equal(container.querySelector("#f-lower-replay-count").value, "8");
+  assert.match(container.querySelector("#cz100-log").textContent, /2回中1回/);
+  assert.match(container.querySelector("#pullback-log").textContent, /2回中1回/);
+
+  container.querySelector('#cz100-log .binary-log-del[data-index="0"]').click();
+  await wait();
+  const afterDelete = await listSettingObservations(db, { shopId, machineId });
+  assert.deepEqual(afterDelete[0].cz100_log.map((entry) => entry.win), [false]);
+});
+
 console.log(`\n${passCount} 件成功`);

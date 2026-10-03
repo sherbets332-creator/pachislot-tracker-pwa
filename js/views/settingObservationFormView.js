@@ -184,6 +184,21 @@ function renderKageSection(kageLog, summary) {
   return `${rows}<div class="small muted" style="margin-top:6px;">復讐の炎成功 ${summary.totalCount}回／裏 ${summary.uraCount}回（${formatPercent(summary.uraRate)}）</div>`;
 }
 
+function renderBinaryLogSection(definition, log, summary) {
+  if (log.length === 0) return "";
+  const rows = log
+    .map(
+      (entry, index) => `
+        <div class="small" style="display:flex;align-items:center;gap:8px;">
+          <span>${index + 1}.</span>
+          <strong>${entry.win ? escapeHtml(definition.winLabel) : escapeHtml(definition.loseLabel)}</strong>
+          <button type="button" class="btn btn-sm binary-log-del" data-log-key="${definition.key}" data-index="${index}" style="margin-left:auto;">×</button>
+        </div>`
+    )
+    .join("");
+  return `${rows}<div class="small muted" style="margin-top:6px;">${escapeHtml(definition.summaryLabel)}：${summary.totalCount}回中${summary.winCount}回（${formatPercent(summary.winRate)}）</div>`;
+}
+
 function renderMikoSection(mikoLog, summary) {
   if (mikoLog.length === 0) return "";
   const rows = mikoLog
@@ -274,6 +289,11 @@ function readForm(container, logs = null) {
     bonus_count: val("f-bonus-count"),
     st_count: val("f-st-count"),
     bell_count: val("f-bell-count"),
+    cz_remi_count: val("f-cz-remi-count"),
+    cz_rize_count: val("f-cz-rize-count"),
+    episode_count: val("f-episode-count"),
+    replay_direct_count: val("f-replay-direct-count"),
+    lower_replay_count: val("f-lower-replay-count"),
     miko_reach_count: val("f-miko-reach-count"),
     cz_win_count: val("f-cz-win-count"),
     max_ending_stamp: val("f-max-ending-stamp"),
@@ -321,11 +341,16 @@ export async function renderSettingObservationForm(
     machine_number: observation?.machine_number ?? "",
     game_count: observation?.game_count ?? 0,
     total_game_count: observation?.total_game_count ?? "", // 空欄＝記録していない（任意項目）
-    at_count: observation?.at_count ?? 0,
+    at_count: observation?.at_count ?? (reference.MACHINE_KEY === "tokyo_ghoul" ? "" : 0),
     bonus_direct_count: observation?.bonus_direct_count ?? "", // 空欄＝数えていない（推定に使わない）
     bonus_count: observation?.bonus_count ?? "",
     st_count: observation?.st_count ?? "",
     bell_count: observation?.bell_count ?? "",
+    cz_remi_count: observation?.cz_remi_count ?? "",
+    cz_rize_count: observation?.cz_rize_count ?? "",
+    episode_count: observation?.episode_count ?? "",
+    replay_direct_count: observation?.replay_direct_count ?? "",
+    lower_replay_count: observation?.lower_replay_count ?? "",
     miko_reach_count: observation?.miko_reach_count ?? 0,
     cz_win_count: observation?.cz_win_count ?? 0,
     max_ending_stamp: observation?.max_ending_stamp ?? "none",
@@ -338,6 +363,8 @@ export async function renderSettingObservationForm(
     at_game_count: observation?.at_game_count ?? "", // 空欄＝総ゲーム数−通常ゲーム数の目安を使う
     at_cz_log: observation?.at_cz_log ?? [],
     kage_log: observation?.kage_log ?? [],
+    cz100_log: observation?.cz100_log ?? [],
+    pullback_log: observation?.pullback_log ?? [],
     memo: observation?.memo ?? "",
   };
   // 周期メモ・巫女ポイント0メモ・示唆チェック・ストラップ回数は画面上で追記していくので、手元に持つ。
@@ -348,13 +375,18 @@ export async function renderSettingObservationForm(
     strap_counts: { ...(values.strap_counts || {}) },
     at_cz_log: [...(values.at_cz_log || [])],
     kage_log: [...(values.kage_log || [])],
+    cz100_log: [...(values.cz100_log || [])],
+    pullback_log: [...(values.pullback_log || [])],
   };
+  const isOtome = reference.MACHINE_KEY === "sengoku_otome5";
   const isKabaneri = reference.MACHINE_KEY === "kabaneri2_unato";
-  const supportsDwin = !isKabaneri;
+  const isTokyoGhoul = reference.MACHINE_KEY === "tokyo_ghoul";
+  const supportsDwin = isOtome;
   const hasPeriodLog =
     typeof reference.summarizePeriodLog === "function" || typeof reference.summarizePeriodStats === "function";
   const hasMikoLog = typeof reference.summarizeMikoLog === "function";
   const hasKageLog = typeof reference.summarizeKageLog === "function";
+  const binaryLogs = reference.BINARY_LOGS || [];
   const hasCeilingResetHint = "SETTING_CHANGE_CEILING_GAMES" in reference;
   const atCzKinds = reference.AT_CZ_KINDS || [];
   const strapModes = reference.STRAP_MODES || [];
@@ -407,7 +439,9 @@ export async function renderSettingObservationForm(
         <div class="hint">${
           isKabaneri
             ? "初当たり・ST・下段ベルの分母は未確認です。暫定的に通常ゲーム数を使います（要検証）。"
-            : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
+            : isTokyoGhoul
+              ? "各確率の分母は未確認です。暫定的に通常ゲーム数を使います（要検証）。"
+              : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
         }</div>
       </div>
       <div class="field">
@@ -415,7 +449,7 @@ export async function renderSettingObservationForm(
         <input type="number" id="f-total-game-count" min="0" inputmode="numeric" placeholder="AT消化分も含めた合計。任意" value="${values.total_game_count ?? ""}">
         <div class="hint">AT・ボーナス消化分も含めた、その日実際に回したゲーム数。記録用の参考値で、推定計算には使いません。</div>
       </div>
-      ${!isKabaneri ? `<div class="field">
+      ${isOtome ? `<div class="field">
         <label>AT当選回数（初当たり合計）</label>
         <input type="number" id="f-at-count" min="0" inputmode="numeric" value="${values.at_count}">
         <div class="hint">戦国乙女ボーナス直撃・CZ勝利、どちらでのAT当選も合わせた回数。</div>
@@ -424,7 +458,7 @@ export async function renderSettingObservationForm(
         <label>うち戦国乙女ボーナス直撃回数</label>
         <input type="number" id="f-bonus-direct-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bonus_direct_count ?? ""}">
         <div class="hint">設定1:1/21206.7〜設定6:1/5502.7と設定差が大きい要素。数えた日は0回でも「0」を入れると推定に反映されます（空欄なら使いません）。</div>
-      </div>` : `
+      </div>` : isKabaneri ? `
       <div class="field">
         <label>ボーナス初当たり回数（任意）</label>
         <input type="number" id="f-bonus-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bonus_count ?? ""}">
@@ -436,7 +470,31 @@ export async function renderSettingObservationForm(
       <div class="field">
         <label>下段ベル回数（任意）</label>
         <input type="number" id="f-bell-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bell_count ?? ""}">
-      </div>`}
+      </div>` : isTokyoGhoul ? `
+      <div class="field">
+        <label>AT初当たり回数（任意）</label>
+        <input type="number" id="f-at-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.at_count ?? ""}">
+      </div>
+      <div class="field">
+        <label>CZ「レミニセンス」回数（任意）</label>
+        <input type="number" id="f-cz-remi-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.cz_remi_count ?? ""}">
+      </div>
+      <div class="field">
+        <label>上位CZ「大喰いの利世」回数（任意）</label>
+        <input type="number" id="f-cz-rize-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.cz_rize_count ?? ""}">
+      </div>
+      <div class="field">
+        <label>エピソードボーナス回数（任意）</label>
+        <input type="number" id="f-episode-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.episode_count ?? ""}">
+      </div>
+      <div class="field">
+        <label>リプレイからのAT直撃回数（任意）</label>
+        <input type="number" id="f-replay-direct-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.replay_direct_count ?? ""}">
+      </div>
+      <div class="field">
+        <label>下段リプレイ回数（任意）</label>
+        <input type="number" id="f-lower-replay-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.lower_replay_count ?? ""}">
+      </div>` : ""}
       ${hasPeriodLog ? `<div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
         <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
@@ -481,6 +539,20 @@ export async function renderSettingObservationForm(
         </div>
         <div id="kage-log"></div>
       </div>` : ""}
+
+      ${binaryLogs
+        .map(
+          (definition) => `<div class="card" id="${definition.idPrefix}-card">
+        <h2 style="margin-top:0;">${escapeHtml(definition.title)}</h2>
+        <div class="hint small muted">${escapeHtml(definition.description)}</div>
+        <div class="field" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn binary-log-btn" data-log-key="${definition.key}" data-win="0">${escapeHtml(definition.loseLabel)}</button>
+          <button type="button" class="btn btn-primary binary-log-btn" data-log-key="${definition.key}" data-win="1">${escapeHtml(definition.winLabel)}</button>
+        </div>
+        <div id="${definition.idPrefix}-log"></div>
+      </div>`
+        )
+        .join("")}
 
       ${
         atCzKinds.length
@@ -664,6 +736,18 @@ export async function renderSettingObservationForm(
         })
       );
     }
+
+    for (const definition of binaryLogs) {
+      const log = logs[definition.key];
+      const summary = reference.summarizeResultLog(log);
+      $(`${definition.idPrefix}-log`).innerHTML = renderBinaryLogSection(definition, log, summary);
+      $(`${definition.idPrefix}-log`).querySelectorAll(".binary-log-del").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          logs[btn.dataset.logKey].splice(Number(btn.dataset.index), 1);
+          await onLogChanged();
+        })
+      );
+    }
     refreshAtCz();
     updateEstimate();
   }
@@ -765,6 +849,13 @@ export async function renderSettingObservationForm(
   container.querySelectorAll(".kage-btn").forEach((btn) =>
     btn.addEventListener("click", async () => {
       logs.kage_log.push({ id: Date.now(), ura: btn.dataset.ura === "1" });
+      await onLogChanged();
+    })
+  );
+
+  container.querySelectorAll(".binary-log-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      logs[btn.dataset.logKey].push({ id: Date.now(), win: btn.dataset.win === "1" });
       await onLogChanged();
     })
   );
@@ -897,6 +988,11 @@ export async function renderSettingObservationForm(
     "f-bonus-count",
     "f-st-count",
     "f-bell-count",
+    "f-cz-remi-count",
+    "f-cz-rize-count",
+    "f-episode-count",
+    "f-replay-direct-count",
+    "f-lower-replay-count",
     "f-miko-reach-count",
     "f-cz-win-count",
     "f-max-ending-stamp",

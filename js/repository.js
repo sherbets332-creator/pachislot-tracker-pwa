@@ -489,6 +489,12 @@ function normalizeKageLog(log) {
   return log.map((entry) => ({ id: entry.id ?? null, ura: Boolean(entry.ura) }));
 }
 
+/** 汎用の成否メモ（[{id, win}]）を保存用に正規化する。 */
+function normalizeResultLog(log) {
+  if (!Array.isArray(log)) return [];
+  return log.map((entry) => ({ id: entry.id ?? null, win: Boolean(entry.win) }));
+}
+
 /** 乙女ストラップ等の出現回数（{キー: 回数}）を保存用に正規化する。 */
 function normalizeStrapCounts(counts) {
   const result = {};
@@ -502,8 +508,16 @@ function normalizeStrapCounts(counts) {
 }
 
 function buildSettingObservationFields(form) {
+  const parseOptionalCount = (raw, label) =>
+    raw === null || raw === undefined || String(raw).trim() === ""
+      ? null
+      : parseIntField(String(raw), label, { required: false, minimum: 0 });
   const gameCount = parseIntField(form.game_count, "通常ゲーム数", { required: false, minimum: 0 });
-  const atCount = parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
+  // 東京喰種は空欄＝未計測を0回と区別する。戦国乙女5は従来どおり空欄を0回として扱う。
+  const atCount =
+    form.machine_key === "tokyo_ghoul"
+      ? parseOptionalCount(form.at_count, "AT初当たり回数")
+      : parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
   // 総ゲーム数（AT消化分も含む）は空欄＝「記録していない」としてnullのまま保存する（推定には使わない）。
   const totalRaw = form.total_game_count;
   const totalGameCount =
@@ -519,13 +533,14 @@ function buildSettingObservationFields(form) {
       ? null
       : parseIntField(String(bonusRaw), "ボーナス直撃回数", { required: false, minimum: 0 });
 
-  const parseOptionalCount = (raw, label) =>
-    raw === null || raw === undefined || String(raw).trim() === ""
-      ? null
-      : parseIntField(String(raw), label, { required: false, minimum: 0 });
   const bonusCount = parseOptionalCount(form.bonus_count, "ボーナス初当たり回数");
   const stCount = parseOptionalCount(form.st_count, "ST初当たり回数");
   const bellCount = parseOptionalCount(form.bell_count, "下段ベル回数");
+  const czRemiCount = parseOptionalCount(form.cz_remi_count, "レミニセンス回数");
+  const czRizeCount = parseOptionalCount(form.cz_rize_count, "大喰いの利世回数");
+  const episodeCount = parseOptionalCount(form.episode_count, "エピソードボーナス回数");
+  const replayDirectCount = parseOptionalCount(form.replay_direct_count, "リプレイからのAT直撃回数");
+  const lowerReplayCount = parseOptionalCount(form.lower_replay_count, "下段リプレイ回数");
 
   // AT中ゲーム数は空欄＝「手で数えていない」（画面側で総ゲーム数−通常ゲーム数の目安を使う）。
   const atGameRaw = form.at_game_count;
@@ -534,7 +549,7 @@ function buildSettingObservationFields(form) {
       ? null
       : parseIntField(String(atGameRaw), "AT中ゲーム数", { required: false, minimum: 0 });
 
-  if (atCount > gameCount) {
+  if (atCount !== null && atCount > gameCount) {
     throw new ValidationError("AT当選回数が通常ゲーム数を超えています。");
   }
   if (czWinCount > mikoReachCount) {
@@ -559,6 +574,11 @@ function buildSettingObservationFields(form) {
     bonus_count: bonusCount,
     st_count: stCount,
     bell_count: bellCount,
+    cz_remi_count: czRemiCount,
+    cz_rize_count: czRizeCount,
+    episode_count: episodeCount,
+    replay_direct_count: replayDirectCount,
+    lower_replay_count: lowerReplayCount,
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
@@ -567,6 +587,8 @@ function buildSettingObservationFields(form) {
     at_game_count: atGameCount,
     at_cz_log: normalizeAtCzLog(form.at_cz_log),
     kage_log: normalizeKageLog(form.kage_log),
+    cz100_log: normalizeResultLog(form.cz100_log),
+    pullback_log: normalizeResultLog(form.pullback_log),
     hint_flags: Array.isArray(form.hint_flags) ? form.hint_flags.map(String) : [],
     strap_counts: normalizeStrapCounts(form.strap_counts),
     memo: (form.memo ?? "").toString().trim(),
