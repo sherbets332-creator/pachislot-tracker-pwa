@@ -31,6 +31,22 @@ function formatRateAsFraction(value) {
   return `1/${(1 / value).toFixed(1)}`;
 }
 
+function renderLikelihoodBars(settingLabels, likelihoods) {
+  return settingLabels
+    .map((label, i) => {
+      const pct = (likelihoods[i] || 0) * 100;
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="width:3.5em;" class="small">${escapeHtml(label)}</div>
+          <div style="flex:1;background:#eee;border-radius:4px;overflow:hidden;height:14px;">
+            <div style="width:${pct.toFixed(1)}%;background:#0d6efd;height:100%;"></div>
+          </div>
+          <div style="width:3.5em;text-align:right;" class="small muted">${pct.toFixed(1)}%</div>
+        </div>`;
+    })
+    .join("");
+}
+
 function renderEstimatePanel(reference, estimate) {
   const headline = summarizeEstimateHeadline(estimate);
   const observedSummary = estimate.observedMetrics
@@ -48,19 +64,7 @@ function renderEstimatePanel(reference, estimate) {
     : `AT初当たり実測：${estimate.observedAtRate !== null ? `${formatRateAsFraction(estimate.observedAtRate)}（${formatPercent(estimate.observedAtRate, 2)}）` : "データ無し"}
         ／
         CZ当選率実測：${estimate.observedCzRate !== null ? formatPercent(estimate.observedCzRate) : "データ無し"}`;
-  const bars = estimate.settingLabels
-    .map((label, i) => {
-      const pct = estimate.likelihoods[i] * 100;
-      return `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <div style="width:3.5em;" class="small">${label}</div>
-          <div style="flex:1;background:#eee;border-radius:4px;overflow:hidden;height:14px;">
-            <div style="width:${pct.toFixed(1)}%;background:#0d6efd;height:100%;"></div>
-          </div>
-          <div style="width:3.5em;text-align:right;" class="small muted">${pct.toFixed(1)}%</div>
-        </div>`;
-    })
-    .join("");
+  const bars = renderLikelihoodBars(estimate.settingLabels, estimate.likelihoods);
 
   return `
     <div class="card">
@@ -80,6 +84,19 @@ function renderEstimatePanel(reference, estimate) {
         ${observedSummary}
       </div>
       ${bars}
+      ${(estimate.alternativeEstimates || [])
+        .map(
+          (alternative) => `
+          <div class="card" style="margin-top:10px;margin-bottom:0;">
+            <div class="fw-bold" style="margin-bottom:6px;">${escapeHtml(alternative.label)}</div>
+            ${renderLikelihoodBars(alternative.settingLabels || estimate.settingLabels, alternative.likelihoods || [])}
+            ${alternative.note ? `<div class="small muted" style="margin-top:6px;">${escapeHtml(alternative.note)}</div>` : ""}
+          </div>`
+        )
+        .join("")}
+      ${(estimate.warningMessages || [])
+        .map((message) => `<div class="alert" style="margin-top:8px;">${escapeHtml(message)}</div>`)
+        .join("")}
       ${
         estimate.observedBonusRate !== undefined && estimate.observedBonusRate !== null
           ? `<div class="small muted" style="margin-top:4px;">ボーナス直撃実測：${estimate.observedBonusRate > 0 ? formatRateAsFraction(estimate.observedBonusRate) : "0回"}（推定に反映）</div>`
@@ -294,6 +311,9 @@ function readForm(container, logs = null) {
     episode_count: val("f-episode-count"),
     replay_direct_count: val("f-replay-direct-count"),
     lower_replay_count: val("f-lower-replay-count"),
+    cz_count: val("f-cz-count"),
+    direct_at_count: val("f-direct-at-count"),
+    yagyu_count: val("f-yagyu-count"),
     miko_reach_count: val("f-miko-reach-count"),
     cz_win_count: val("f-cz-win-count"),
     max_ending_stamp: val("f-max-ending-stamp"),
@@ -341,7 +361,9 @@ export async function renderSettingObservationForm(
     machine_number: observation?.machine_number ?? "",
     game_count: observation?.game_count ?? 0,
     total_game_count: observation?.total_game_count ?? "", // 空欄＝記録していない（任意項目）
-    at_count: observation?.at_count ?? (reference.MACHINE_KEY === "tokyo_ghoul" ? "" : 0),
+    at_count:
+      observation?.at_count ??
+      (reference.MACHINE_KEY === "tokyo_ghoul" || reference.MACHINE_KEY === "shinuchi_yoshimune" ? "" : 0),
     bonus_direct_count: observation?.bonus_direct_count ?? "", // 空欄＝数えていない（推定に使わない）
     bonus_count: observation?.bonus_count ?? "",
     st_count: observation?.st_count ?? "",
@@ -351,6 +373,9 @@ export async function renderSettingObservationForm(
     episode_count: observation?.episode_count ?? "",
     replay_direct_count: observation?.replay_direct_count ?? "",
     lower_replay_count: observation?.lower_replay_count ?? "",
+    cz_count: observation?.cz_count ?? "",
+    direct_at_count: observation?.direct_at_count ?? "",
+    yagyu_count: observation?.yagyu_count ?? "",
     miko_reach_count: observation?.miko_reach_count ?? 0,
     cz_win_count: observation?.cz_win_count ?? 0,
     max_ending_stamp: observation?.max_ending_stamp ?? "none",
@@ -365,6 +390,7 @@ export async function renderSettingObservationForm(
     kage_log: observation?.kage_log ?? [],
     cz100_log: observation?.cz100_log ?? [],
     pullback_log: observation?.pullback_log ?? [],
+    batto_log: observation?.batto_log ?? [],
     memo: observation?.memo ?? "",
   };
   // 周期メモ・巫女ポイント0メモ・示唆チェック・ストラップ回数は画面上で追記していくので、手元に持つ。
@@ -377,10 +403,12 @@ export async function renderSettingObservationForm(
     kage_log: [...(values.kage_log || [])],
     cz100_log: [...(values.cz100_log || [])],
     pullback_log: [...(values.pullback_log || [])],
+    batto_log: [...(values.batto_log || [])],
   };
   const isOtome = reference.MACHINE_KEY === "sengoku_otome5";
   const isKabaneri = reference.MACHINE_KEY === "kabaneri2_unato";
   const isTokyoGhoul = reference.MACHINE_KEY === "tokyo_ghoul";
+  const isShinuchiYoshimune = reference.MACHINE_KEY === "shinuchi_yoshimune";
   const supportsDwin = isOtome;
   const hasPeriodLog =
     typeof reference.summarizePeriodLog === "function" || typeof reference.summarizePeriodStats === "function";
@@ -441,7 +469,9 @@ export async function renderSettingObservationForm(
             ? "初当たり・ST・下段ベルの分母は未確認です。暫定的に通常ゲーム数を使います（要検証）。"
             : isTokyoGhoul
               ? "各確率の分母は未確認です。暫定的に通常ゲーム数を使います（要検証）。"
-              : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
+              : isShinuchiYoshimune
+                ? "マイスロ中断データの『通常プレイ数』（CZ込みではない方）。解析値の分母定義は未確認のため要検証です。"
+                : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
         }</div>
       </div>
       <div class="field">
@@ -494,6 +524,26 @@ export async function renderSettingObservationForm(
       <div class="field">
         <label>下段リプレイ回数（任意）</label>
         <input type="number" id="f-lower-replay-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.lower_replay_count ?? ""}">
+      </div>` : isShinuchiYoshimune ? `
+      <div class="field">
+        <label>AT初当たり回数（任意）</label>
+        <input type="number" id="f-at-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.at_count ?? ""}">
+        <div class="hint">マイスロ中断データの「初当り回数」。CZ成功と直撃ATの合計です。</div>
+      </div>
+      <div class="field">
+        <label>CZ（悪人成敗チャンス）総回数（任意）</label>
+        <input type="number" id="f-cz-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.cz_count ?? ""}">
+        <div class="hint">マイスロ中断データの「悪人成敗チャンス全体」の成功数ではなく<strong>総回数</strong>を入力。直撃ATは含めません。</div>
+      </div>
+      <div class="field">
+        <label>直撃AT回数（任意）</label>
+        <input type="number" id="f-direct-at-count" min="0" inputmode="numeric" placeholder="未入力なら直撃込み推定を表示しない" value="${values.direct_at_count ?? ""}">
+        <div class="hint">マイスロ中断データでは「初当り回数 − 悪人成敗チャンスの成功数」で確認できます。自動計算はしません。</div>
+      </div>
+      <div class="field">
+        <label>CZで柳生だった回数（任意）</label>
+        <input type="number" id="f-yagyu-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.yagyu_count ?? ""}">
+        <div class="hint">マイスロ中断データの「悪人成敗チャンス 柳生」の成功数ではなく<strong>総回数</strong>を入力。CZ総回数以下にしてください。</div>
       </div>` : ""}
       ${hasPeriodLog ? `<div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
@@ -619,6 +669,7 @@ export async function renderSettingObservationForm(
           .map(
             (group) => `
           <div class="small" style="margin-top:6px;font-weight:bold;">${escapeHtml(group)}</div>
+          ${reference.SETTING_HINT_GROUP_NOTES?.[group] ? `<div class="hint small muted">${escapeHtml(reference.SETTING_HINT_GROUP_NOTES[group])}</div>` : ""}
           ${settingHints
             .filter((h) => h.group === group)
             .map(
@@ -656,7 +707,7 @@ export async function renderSettingObservationForm(
         <input type="number" id="f-cz-win-count" min="0" inputmode="numeric" value="${values.cz_win_count}">
       </div>` : ""}
       ${reference.ENDING_STAMPS.length ? `<div class="field">
-        <label>${isKabaneri ? "ST終了画面、その日一番高かったもの" : "ボーナス終了画面スタンプ、その日一番高かったもの"}</label>
+        <label>${escapeHtml(reference.ENDING_STAMP_FIELD_LABEL || (isKabaneri ? "ST終了画面、その日一番高かったもの" : "ボーナス終了画面スタンプ、その日一番高かったもの"))}</label>
         <select id="f-max-ending-stamp">${stampOptions}</select>
       </div>` : ""}
       ${reference.PAYOUT_OVER_HINTS.length ? `<div class="field">
@@ -689,8 +740,12 @@ export async function renderSettingObservationForm(
 
   function updateEstimate() {
     const current = readForm(container, logs);
-    const estimate = reference.buildEstimate(current);
-    estimatePanel.innerHTML = renderEstimatePanel(reference, estimate);
+    try {
+      const estimate = reference.buildEstimate(current);
+      estimatePanel.innerHTML = renderEstimatePanel(reference, estimate);
+    } catch (err) {
+      estimatePanel.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+    }
   }
 
   /** 周期メモ・巫女メモの表示を描き直し、巫女メモがあれば回数欄をメモからの集計値で上書き（読み取り専用）する。 */
@@ -993,6 +1048,9 @@ export async function renderSettingObservationForm(
     "f-episode-count",
     "f-replay-direct-count",
     "f-lower-replay-count",
+    "f-cz-count",
+    "f-direct-at-count",
+    "f-yagyu-count",
     "f-miko-reach-count",
     "f-cz-win-count",
     "f-max-ending-stamp",

@@ -513,9 +513,9 @@ function buildSettingObservationFields(form) {
       ? null
       : parseIntField(String(raw), label, { required: false, minimum: 0 });
   const gameCount = parseIntField(form.game_count, "通常ゲーム数", { required: false, minimum: 0 });
-  // 東京喰種は空欄＝未計測を0回と区別する。戦国乙女5は従来どおり空欄を0回として扱う。
+  // 東京喰種・真打 吉宗は空欄＝未計測を0回と区別する。戦国乙女5は従来どおり空欄を0回として扱う。
   const atCount =
-    form.machine_key === "tokyo_ghoul"
+    form.machine_key === "tokyo_ghoul" || form.machine_key === "shinuchi_yoshimune"
       ? parseOptionalCount(form.at_count, "AT初当たり回数")
       : parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
   // 総ゲーム数（AT消化分も含む）は空欄＝「記録していない」としてnullのまま保存する（推定には使わない）。
@@ -541,6 +541,9 @@ function buildSettingObservationFields(form) {
   const episodeCount = parseOptionalCount(form.episode_count, "エピソードボーナス回数");
   const replayDirectCount = parseOptionalCount(form.replay_direct_count, "リプレイからのAT直撃回数");
   const lowerReplayCount = parseOptionalCount(form.lower_replay_count, "下段リプレイ回数");
+  const czCount = parseOptionalCount(form.cz_count, "CZ総回数");
+  const directAtCount = parseOptionalCount(form.direct_at_count, "直撃AT回数");
+  const yagyuCount = parseOptionalCount(form.yagyu_count, "柳生回数");
 
   // AT中ゲーム数は空欄＝「手で数えていない」（画面側で総ゲーム数−通常ゲーム数の目安を使う）。
   const atGameRaw = form.at_game_count;
@@ -557,6 +560,9 @@ function buildSettingObservationFields(form) {
   }
   if (totalGameCount !== null && totalGameCount < gameCount) {
     throw new ValidationError("総ゲーム数が通常ゲーム数を下回っています。");
+  }
+  if (czCount !== null && yagyuCount !== null && yagyuCount > czCount) {
+    throw new ValidationError("柳生回数がCZ総回数を超えています。");
   }
 
   return {
@@ -579,6 +585,9 @@ function buildSettingObservationFields(form) {
     episode_count: episodeCount,
     replay_direct_count: replayDirectCount,
     lower_replay_count: lowerReplayCount,
+    cz_count: czCount,
+    direct_at_count: directAtCount,
+    yagyu_count: yagyuCount,
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
@@ -589,6 +598,7 @@ function buildSettingObservationFields(form) {
     kage_log: normalizeKageLog(form.kage_log),
     cz100_log: normalizeResultLog(form.cz100_log),
     pullback_log: normalizeResultLog(form.pullback_log),
+    batto_log: normalizeResultLog(form.batto_log),
     hint_flags: Array.isArray(form.hint_flags) ? form.hint_flags.map(String) : [],
     strap_counts: normalizeStrapCounts(form.strap_counts),
     memo: (form.memo ?? "").toString().trim(),

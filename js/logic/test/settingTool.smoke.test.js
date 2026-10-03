@@ -676,4 +676,85 @@ await test("観測記録フォーム: 東京喰種の手入力と成否ログを
   assert.deepEqual(afterDelete[0].cz100_log.map((entry) => entry.win), [false]);
 });
 
+await test("観測記録フォーム: 真打 吉宗の専用項目を表示し、既存3機種の項目は変えない", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
+  const yoshimuneId = await createMachine(db, { name: "真打 吉宗" });
+  const ghoulId = await createMachine(db, { name: "L 東京喰種" });
+  const kabaneriId = await createMachine(db, { name: "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦" });
+  const otomeId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: yoshimuneId });
+  for (const id of ["f-at-count", "f-cz-count", "f-direct-at-count", "f-yagyu-count", "batto-card"]) {
+    assert.ok(container.querySelector(`#${id}`), `${id} が表示される`);
+  }
+  assert.equal(container.querySelector("#f-at-count").value, "");
+  assert.ok(container.querySelector("#f-max-ending-stamp"));
+  assert.ok(container.querySelector("#f-max-payout-over"));
+  assert.equal(container.querySelector("#dwin-card"), null);
+  assert.equal(container.querySelector("#period-card"), null);
+  assert.match(container.textContent, /通常プレイ数/);
+  assert.match(container.textContent, /総回数/);
+  assert.match(container.textContent, /AT終了後の初回と5周期目は記録しない/);
+  assert.match(container.textContent, /ポイント特化ゾーン終了時にPUSH/);
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: ghoulId });
+  assert.ok(container.querySelector("#cz100-card"));
+  assert.ok(container.querySelector("#pullback-card"));
+  assert.equal(container.querySelector("#batto-card"), null);
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: kabaneriId });
+  assert.ok(container.querySelector("#period-card"));
+  assert.ok(container.querySelector("#kage-card"));
+  assert.equal(container.querySelector("#batto-card"), null);
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: otomeId });
+  assert.ok(container.querySelector("#miko-card"));
+  assert.ok(container.querySelector("#dwin-card"));
+  assert.equal(container.querySelector("#batto-card"), null);
+});
+
+await test("観測記録フォーム: 真打 吉宗の入力・抜刀ログを保存して再表示できる", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "真打 吉宗" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-play-date").value = "2026-10-03";
+  container.querySelector("#f-game-count").value = "2816";
+  container.querySelector("#f-total-game-count").value = "3500";
+  container.querySelector("#f-at-count").value = "11";
+  container.querySelector("#f-cz-count").value = "8";
+  container.querySelector("#f-yagyu-count").value = "1";
+
+  assert.doesNotMatch(container.querySelector("#estimate-panel").textContent, /CZ直撃込みで計算/);
+  container.querySelector('.binary-log-btn[data-log-key="batto_log"][data-win="1"]').click();
+  await wait();
+  container.querySelector('.binary-log-btn[data-log-key="batto_log"][data-win="0"]').click();
+  await wait();
+
+  let observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].machine_key, "shinuchi_yoshimune");
+  assert.equal(observations[0].at_count, 11);
+  assert.equal(observations[0].cz_count, 8);
+  assert.equal(observations[0].direct_at_count, null);
+  assert.equal(observations[0].yagyu_count, 1);
+  assert.deepEqual(observations[0].batto_log.map((entry) => entry.win), [true, false]);
+
+  await renderSettingObservationForm(container, db, { observationId: observations[0].id });
+  assert.equal(container.querySelector("#f-cz-count").value, "8");
+  assert.match(container.querySelector("#batto-log").textContent, /2回中1回/);
+
+  container.querySelector("#f-direct-at-count").value = "4";
+  fireEvent(container.querySelector("#f-direct-at-count"), "input");
+  const panelText = container.querySelector("#estimate-panel").textContent;
+  assert.match(panelText, /CZ直撃込みで計算/);
+  assert.match(panelText, /どちらの定義が正しいか未確認/);
+  assert.match(panelText, /直撃ATは天井やモードC周期でも起きます/);
+
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+  observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations[0].direct_at_count, 4);
+});
+
 console.log(`\n${passCount} 件成功`);

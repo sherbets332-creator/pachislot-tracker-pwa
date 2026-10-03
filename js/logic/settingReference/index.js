@@ -7,9 +7,10 @@
 import * as sengokuOtome5 from "./sengokuOtome5.js";
 import * as kabaneri2 from "./kabaneri2.js";
 import * as tokyoGhoul from "./tokyoGhoul.js";
+import * as shinuchiYoshimune from "./shinuchiYoshimune.js";
 
 /** 対応している設定判別リファレンスの一覧。 */
-export const REFERENCES = [sengokuOtome5, kabaneri2, tokyoGhoul];
+export const REFERENCES = [sengokuOtome5, kabaneri2, tokyoGhoul, shinuchiYoshimune];
 
 /** 機種名（MACHINE_NAME または MACHINE_ALIASES と完全一致）から対応リファレンスを探す。無ければnull。 */
 export function getReferenceByMachineName(machineName) {
