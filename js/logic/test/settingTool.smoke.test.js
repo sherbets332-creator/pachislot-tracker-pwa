@@ -69,6 +69,27 @@ await test("設定判別ツール: 対応機種が無ければ案内メッセー
   assert.equal(container.querySelector("#f-machine-id").disabled, true);
 });
 
+await test("設定判別ツール: 未登録の対応機種をボタン1つで正式名のまま登録できる（登録済み・別名は重複しない）", async (db, container) => {
+  const { listAllMachines } = await import("../../repository.js");
+  await createMachine(db, { name: "東京喰種" }); // 別名で登録済み → 登録対象に出ない
+  await renderSettingTool(container, db, new URLSearchParams(""));
+  const card = container.querySelector("#register-machines-card");
+  assert.ok(card);
+  assert.ok(!card.textContent.includes("L 東京喰種"));
+  assert.match(card.textContent, /カバネリ/);
+
+  container.querySelector("#register-machines-btn").click();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const names = (await listAllMachines(db)).map((m) => m.name);
+  assert.ok(names.includes("スマスロ 甲鉄城のカバネリ 海門(うなと)決戦"));
+  assert.ok(names.includes("L戦国乙女5 業火を穿つ宿焔の双刃"));
+  assert.equal(names.filter((n) => n.includes("東京喰種")).length, 1);
+  assert.equal(container.querySelector("#register-machines-card"), null);
+  const optionTexts = Array.from(container.querySelector("#f-machine-id").options).map((o) => o.textContent);
+  assert.ok(optionTexts.includes("スマスロ 甲鉄城のカバネリ 海門(うなと)決戦"));
+});
+
 await test("設定判別ツール: 対応機種（戦国乙女5）だけが機種セレクトに出る", async (db, container) => {
   await createShop(db, { name: "店B", exchange_rate: "20", lending_rate: "20" });
   await createMachine(db, { name: "北斗の拳" });

@@ -2,12 +2,12 @@
  * 設定判別参考ツールのトップ画面。店舗・機種（対応機種のみ）を選ぶと、
  * その店舗・機種の過去の観測記録一覧が出る。Flask版には無い、PWA版独自の画面。
  */
-import { listAllShops, listAllMachines, listSettingObservations } from "../repository.js";
+import { listAllShops, listAllMachines, listSettingObservations, bulkCreateMachines } from "../repository.js";
 import { getReferenceByMachineName, REFERENCES } from "../logic/settingReference/index.js";
 import { summarizeEstimateHeadline } from "../logic/settingInference.js";
 import { commas, escapeHtml } from "../ui/format.js";
 import { buildUrl, navigate } from "../router.js";
-import { renderFlash } from "../ui/flash.js";
+import { renderFlash, setFlash } from "../ui/flash.js";
 
 export async function renderSettingTool(container, db, query) {
   const shops = await listAllShops(db);
@@ -27,6 +27,19 @@ export async function renderSettingTool(container, db, query) {
       (m) => `<option value="${m.id}" ${m.id === machineId ? "selected" : ""}>${escapeHtml(m.name)}</option>`
     ),
   ].join("");
+
+  // 機種マスタに未登録（正式名・別名のどちらでも見つからない）の対応機種。ボタン1つで正式名のまま登録できる。
+  const registeredNames = new Set(allMachines.map((m) => m.name));
+  const unregisteredNames = REFERENCES.filter(
+    (ref) => ![ref.MACHINE_NAME, ...(ref.MACHINE_ALIASES || [])].some((name) => registeredNames.has(name))
+  ).map((ref) => ref.MACHINE_NAME);
+  const registerHtml = unregisteredNames.length
+    ? `<div class="card" id="register-machines-card">
+        <div class="small">機種マスタに未登録の対応機種：</div>
+        <ul class="small">${unregisteredNames.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>
+        <button type="button" class="btn btn-primary btn-sm" id="register-machines-btn">対応機種を機種マスタに登録</button>
+      </div>`
+    : "";
 
   let bodyHtml = "";
   if (supportedMachines.length === 0) {
@@ -88,6 +101,7 @@ export async function renderSettingTool(container, db, query) {
       <label>機種（対応機種のみ表示）</label>
       <select id="f-machine-id" ${supportedMachines.length === 0 ? "disabled" : ""}>${machineOptions}</select>
     </div>
+    ${registerHtml}
     ${bodyHtml}
   `;
 
@@ -99,4 +113,14 @@ export async function renderSettingTool(container, db, query) {
   container.querySelector("#f-shop-id").addEventListener("change", goToSelection);
   const machineSelect = container.querySelector("#f-machine-id");
   if (machineSelect) machineSelect.addEventListener("change", goToSelection);
+
+  // 未登録の対応機種を正式名のまま機種マスタに登録し、同じ画面を描き直す。
+  const registerButton = container.querySelector("#register-machines-btn");
+  if (registerButton) {
+    registerButton.addEventListener("click", async () => {
+      const { created } = await bulkCreateMachines(db, unregisteredNames);
+      setFlash(created.length ? `${created.length}機種を登録しました：${created.join("、")}` : "登録済みでした。");
+      await renderSettingTool(container, db, query);
+    });
+  }
 }
