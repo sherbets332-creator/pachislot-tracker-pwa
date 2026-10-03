@@ -483,6 +483,12 @@ function normalizeAtCzLog(log) {
     }));
 }
 
+/** 景之STメモ（[{id, ura}]）を保存用に正規化する。 */
+function normalizeKageLog(log) {
+  if (!Array.isArray(log)) return [];
+  return log.map((entry) => ({ id: entry.id ?? null, ura: Boolean(entry.ura) }));
+}
+
 /** 乙女ストラップ等の出現回数（{キー: 回数}）を保存用に正規化する。 */
 function normalizeStrapCounts(counts) {
   const result = {};
@@ -513,6 +519,14 @@ function buildSettingObservationFields(form) {
       ? null
       : parseIntField(String(bonusRaw), "ボーナス直撃回数", { required: false, minimum: 0 });
 
+  const parseOptionalCount = (raw, label) =>
+    raw === null || raw === undefined || String(raw).trim() === ""
+      ? null
+      : parseIntField(String(raw), label, { required: false, minimum: 0 });
+  const bonusCount = parseOptionalCount(form.bonus_count, "ボーナス初当たり回数");
+  const stCount = parseOptionalCount(form.st_count, "ST初当たり回数");
+  const bellCount = parseOptionalCount(form.bell_count, "下段ベル回数");
+
   // AT中ゲーム数は空欄＝「手で数えていない」（画面側で総ゲーム数−通常ゲーム数の目安を使う）。
   const atGameRaw = form.at_game_count;
   const atGameCount =
@@ -542,6 +556,9 @@ function buildSettingObservationFields(form) {
     miko_reach_count: mikoReachCount,
     cz_win_count: czWinCount,
     bonus_direct_count: bonusDirectCount,
+    bonus_count: bonusCount,
+    st_count: stCount,
+    bell_count: bellCount,
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
@@ -549,6 +566,7 @@ function buildSettingObservationFields(form) {
     miko_log: normalizeMikoLog(form.miko_log),
     at_game_count: atGameCount,
     at_cz_log: normalizeAtCzLog(form.at_cz_log),
+    kage_log: normalizeKageLog(form.kage_log),
     hint_flags: Array.isArray(form.hint_flags) ? form.hint_flags.map(String) : [],
     strap_counts: normalizeStrapCounts(form.strap_counts),
     memo: (form.memo ?? "").toString().trim(),

@@ -500,4 +500,70 @@ await test("観測記録フォーム: 打-WINの読み込みに失敗すると�
   assert.match(container.querySelector("#dwin-status").textContent, /読み込めませんでした/);
 });
 
+await test("観測記録フォーム: カバネリ専用項目を表示し、戦国乙女5の既存項目は変えない", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
+  const kabaneriId = await createMachine(db, { name: "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦" });
+  const otomeId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: kabaneriId });
+  assert.ok(container.querySelector("#f-bonus-count"));
+  assert.ok(container.querySelector("#f-st-count"));
+  assert.ok(container.querySelector("#f-bell-count"));
+  assert.ok(container.querySelector("#period-card"));
+  assert.ok(container.querySelector("#kage-card"));
+  assert.equal(container.querySelector("#miko-card"), null);
+  assert.equal(container.querySelector("#dwin-card"), null);
+  assert.equal(container.querySelector("#f-at-count"), null);
+  assert.match(container.textContent, /分母は未確認/);
+
+  await renderSettingObservationForm(container, db, { shopId, machineId: otomeId });
+  assert.ok(container.querySelector("#f-at-count"));
+  assert.ok(container.querySelector("#f-bonus-direct-count"));
+  assert.ok(container.querySelector("#miko-card"));
+  assert.ok(container.querySelector("#dwin-card"));
+  assert.equal(container.querySelector("#f-bonus-count"), null);
+  assert.equal(container.querySelector("#kage-card"), null);
+});
+
+await test("観測記録フォーム: カバネリの手入力・周期・景之STを保存して再表示できる", async (db, container) => {
+  const shopId = await createShop(db, { name: "テスト店", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦" });
+
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-play-date").value = "2026-10-03";
+  container.querySelector("#f-game-count").value = "5000";
+  container.querySelector("#f-total-game-count").value = "6200";
+  container.querySelector("#f-bonus-count").value = "25";
+  container.querySelector("#f-st-count").value = "16";
+  container.querySelector("#f-bell-count").value = "50";
+
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  container.querySelector("#period-hit-btn").click();
+  await wait();
+  container.querySelector('.kage-btn[data-ura="0"]').click();
+  await wait();
+  container.querySelector('.kage-btn[data-ura="1"]').click();
+  await wait();
+
+  const observations = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].machine_key, "kabaneri2_unato");
+  assert.equal(observations[0].bonus_count, 25);
+  assert.equal(observations[0].st_count, 16);
+  assert.equal(observations[0].bell_count, 50);
+  assert.equal(observations[0].period_log.length, 3);
+  assert.deepEqual(observations[0].kage_log.map((entry) => entry.ura), [false, true]);
+
+  await renderSettingObservationForm(container, db, { observationId: observations[0].id });
+  assert.equal(container.querySelector("#f-bonus-count").value, "25");
+  assert.equal(container.querySelector("#f-st-count").value, "16");
+  assert.equal(container.querySelector("#f-bell-count").value, "50");
+  assert.match(container.querySelector("#period-log").textContent, /3周期目/);
+  assert.match(container.querySelector("#kage-log").textContent, /真景之ST/);
+  assert.match(container.querySelector("#kage-log").textContent, /裏景之ST/);
+});
+
 console.log(`\n${passCount} 件成功`);

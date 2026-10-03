@@ -33,6 +33,21 @@ function formatRateAsFraction(value) {
 
 function renderEstimatePanel(reference, estimate) {
   const headline = summarizeEstimateHeadline(estimate);
+  const observedSummary = estimate.observedMetrics
+    ? estimate.observedMetrics
+        .map((metric) => {
+          const value =
+            metric.value === null || metric.value === undefined
+              ? "データ無し"
+              : metric.format === "percent"
+                ? formatPercent(metric.value)
+                : formatRateAsFraction(metric.value);
+          return `${escapeHtml(metric.label)}：${value}`;
+        })
+        .join("／")
+    : `AT初当たり実測：${estimate.observedAtRate !== null ? `${formatRateAsFraction(estimate.observedAtRate)}（${formatPercent(estimate.observedAtRate, 2)}）` : "データ無し"}
+        ／
+        CZ当選率実測：${estimate.observedCzRate !== null ? formatPercent(estimate.observedCzRate) : "データ無し"}`;
   const bars = estimate.settingLabels
     .map((label, i) => {
       const pct = estimate.likelihoods[i] * 100;
@@ -51,8 +66,10 @@ function renderEstimatePanel(reference, estimate) {
     <div class="card">
       <h2 style="margin-top:0;">推定（参考値）</h2>
       <p class="small muted">
-        AT初当たり確率とCZ当選率の理論値に対して、入力した実測値がどれくらい起こりやすいかを
-        設定1〜6で相対比較しただけの簡易的な目安です。断定はできません。
+        ${escapeHtml(
+          reference.ESTIMATE_DESCRIPTION ||
+            "AT初当たり確率とCZ当選率の理論値に対して、入力した実測値がどれくらい起こりやすいかを設定1〜6で相対比較しただけの簡易的な目安です。断定はできません。"
+        )}
       </p>
       ${
         headline
@@ -60,9 +77,7 @@ function renderEstimatePanel(reference, estimate) {
           : `<div class="small muted" style="margin-bottom:8px;">まだ判断材料がありません。</div>`
       }
       <div class="small" style="margin-bottom:8px;">
-        AT初当たり実測：${estimate.observedAtRate !== null ? `${formatRateAsFraction(estimate.observedAtRate)}（${formatPercent(estimate.observedAtRate, 2)}）` : "データ無し"}
-        ／
-        CZ当選率実測：${estimate.observedCzRate !== null ? formatPercent(estimate.observedCzRate) : "データ無し"}
+        ${observedSummary}
       </div>
       ${bars}
       ${
@@ -89,6 +104,16 @@ function renderEstimatePanel(reference, estimate) {
           : ""
       }
       ${
+        estimate.excludedSettings?.length
+          ? `<div class="small" style="margin-top:6px;">否定設定：${estimate.excludedSettings.map((setting) => `設定${setting}`).join("・")}</div>`
+          : ""
+      }
+      ${
+        estimate.referenceHintSources?.length
+          ? `<div class="small muted" style="margin-top:6px;">${estimate.referenceHintSources.map(escapeHtml).join("<br>")}</div>`
+          : ""
+      }
+      ${
         estimate.strapSummary && estimate.strapSummary.totalCount > 0
           ? `<div class="small" style="margin-top:6px;">設定差ありストラップ（ノブナガ・ゴエモン・ヒデヨシ）出現：<strong>${estimate.strapSummary.settingDiffCount}回</strong>
                <span class="muted">（数値は非公開。多いほど高設定期待）</span></div>`
@@ -106,6 +131,23 @@ function renderEstimatePanel(reference, estimate) {
 }
 
 function renderPeriodSection(reference, summary) {
+  if (summary.byPeriod) {
+    const hitRows = summary.hits
+      .map((hit, index) => `<div class="small">ボーナス${index + 1}回目：<strong>${hit.period}周期目</strong>で当選</div>`)
+      .join("");
+    const stats = [3, 4]
+      .map((period) => summary.byPeriod.find((row) => row.period === period))
+      .filter(Boolean)
+      .map(
+        (row) =>
+          `<div class="small">${row.period}周期目：到達${row.reachCount}回／当選${row.hitCount}回（${formatPercent(row.hitRate)}）</div>`
+      )
+      .join("");
+    const ongoing = summary.ongoing.length
+      ? `<div class="small muted">進行中：${summary.ongoing.length}周期通過</div>`
+      : "";
+    return `${hitRows}${ongoing}${stats}`;
+  }
   const expectation = reference.PERIOD_AT_EXPECTATION_SETTING1 || [];
   const entryLabel = (e) =>
     e.via === "miko" ? "乙女アタック→AT" : e.display_game !== null && e.display_game !== undefined ? `${e.display_game}G` : "?G";
@@ -125,6 +167,21 @@ function renderPeriodSection(reference, summary) {
            <span class="muted">（設定1の1周期目期待度は約${Math.round((expectation[0] || 0) * 100)}%、高設定ほど優遇）</span></div>`
       : "";
   return `${hitRows}${ongoing}${stats}`;
+}
+
+function renderKageSection(kageLog, summary) {
+  if (kageLog.length === 0) return "";
+  const rows = kageLog
+    .map(
+      (entry, index) => `
+        <div class="small" style="display:flex;align-items:center;gap:8px;">
+          <span>${index + 1}.</span>
+          <strong>${entry.ura ? "裏景之ST" : "真景之ST"}</strong>
+          <button type="button" class="btn btn-sm kage-del" data-index="${index}" style="margin-left:auto;">×</button>
+        </div>`
+    )
+    .join("");
+  return `${rows}<div class="small muted" style="margin-top:6px;">復讐の炎成功 ${summary.totalCount}回／裏 ${summary.uraCount}回（${formatPercent(summary.uraRate)}）</div>`;
 }
 
 function renderMikoSection(mikoLog, summary) {
@@ -205,7 +262,7 @@ function renderAtCzSection(reference, entries, summaries, atGame) {
 }
 
 function readForm(container, logs = null) {
-  const val = (id) => container.querySelector(`#${id}`).value;
+  const val = (id) => container.querySelector(`#${id}`)?.value ?? "";
   return {
     ...(logs || {}),
     play_date: val("f-play-date"),
@@ -214,11 +271,14 @@ function readForm(container, logs = null) {
     total_game_count: val("f-total-game-count"),
     at_count: val("f-at-count"),
     bonus_direct_count: val("f-bonus-direct-count"),
+    bonus_count: val("f-bonus-count"),
+    st_count: val("f-st-count"),
+    bell_count: val("f-bell-count"),
     miko_reach_count: val("f-miko-reach-count"),
     cz_win_count: val("f-cz-win-count"),
     max_ending_stamp: val("f-max-ending-stamp"),
     max_payout_over: val("f-max-payout-over"),
-    ceiling_reset_hint: container.querySelector("#f-ceiling-reset-hint").checked,
+    ceiling_reset_hint: container.querySelector("#f-ceiling-reset-hint")?.checked ?? false,
     at_game_count: container.querySelector("#f-at-game-count")?.value ?? "",
     memo: val("f-memo"),
   };
@@ -263,6 +323,9 @@ export async function renderSettingObservationForm(
     total_game_count: observation?.total_game_count ?? "", // 空欄＝記録していない（任意項目）
     at_count: observation?.at_count ?? 0,
     bonus_direct_count: observation?.bonus_direct_count ?? "", // 空欄＝数えていない（推定に使わない）
+    bonus_count: observation?.bonus_count ?? "",
+    st_count: observation?.st_count ?? "",
+    bell_count: observation?.bell_count ?? "",
     miko_reach_count: observation?.miko_reach_count ?? 0,
     cz_win_count: observation?.cz_win_count ?? 0,
     max_ending_stamp: observation?.max_ending_stamp ?? "none",
@@ -274,6 +337,7 @@ export async function renderSettingObservationForm(
     strap_counts: observation?.strap_counts ?? {},
     at_game_count: observation?.at_game_count ?? "", // 空欄＝総ゲーム数−通常ゲーム数の目安を使う
     at_cz_log: observation?.at_cz_log ?? [],
+    kage_log: observation?.kage_log ?? [],
     memo: observation?.memo ?? "",
   };
   // 周期メモ・巫女ポイント0メモ・示唆チェック・ストラップ回数は画面上で追記していくので、手元に持つ。
@@ -283,7 +347,15 @@ export async function renderSettingObservationForm(
     hint_flags: [...(values.hint_flags || [])],
     strap_counts: { ...(values.strap_counts || {}) },
     at_cz_log: [...(values.at_cz_log || [])],
+    kage_log: [...(values.kage_log || [])],
   };
+  const isKabaneri = reference.MACHINE_KEY === "kabaneri2_unato";
+  const supportsDwin = !isKabaneri;
+  const hasPeriodLog =
+    typeof reference.summarizePeriodLog === "function" || typeof reference.summarizePeriodStats === "function";
+  const hasMikoLog = typeof reference.summarizeMikoLog === "function";
+  const hasKageLog = typeof reference.summarizeKageLog === "function";
+  const hasCeilingResetHint = "SETTING_CHANGE_CEILING_GAMES" in reference;
   const atCzKinds = reference.AT_CZ_KINDS || [];
   const strapModes = reference.STRAP_MODES || [];
   const settingHints = reference.SETTING_HINTS || [];
@@ -301,7 +373,7 @@ export async function renderSettingObservationForm(
     <h1>${escapeHtml(machine.name)}の観測記録${isEdit ? "編集" : "新規登録"}</h1>
     <p class="muted small">${escapeHtml(shop.name)}</p>
     <form id="observation-form">
-      <div class="card" id="dwin-card">
+      ${supportsDwin ? `<div class="card" id="dwin-card">
         <h2 style="margin-top:0;">打-WINから読み込む（任意）</h2>
         <div class="hint small muted">
           平和の実機データ確認サービス「打-WIN LITE」のURLを貼るか、QRコードを撮影すると、
@@ -320,7 +392,7 @@ export async function renderSettingObservationForm(
         </div>
         <div id="dwin-status" class="small muted"></div>
         <div id="dwin-reference"></div>
-      </div>
+      </div>` : ""}
       <div class="field">
         <label>日付</label>
         <input type="date" id="f-play-date" required value="${values.play_date}">
@@ -332,14 +404,18 @@ export async function renderSettingObservationForm(
       <div class="field">
         <label>通常ゲーム数</label>
         <input type="number" id="f-game-count" min="0" inputmode="numeric" value="${values.game_count}">
-        <div class="hint">AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。</div>
+        <div class="hint">${
+          isKabaneri
+            ? "初当たり・ST・下段ベルの分母は未確認です。暫定的に通常ゲーム数を使います（要検証）。"
+            : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
+        }</div>
       </div>
       <div class="field">
         <label>総ゲーム数（任意）</label>
         <input type="number" id="f-total-game-count" min="0" inputmode="numeric" placeholder="AT消化分も含めた合計。任意" value="${values.total_game_count ?? ""}">
         <div class="hint">AT・ボーナス消化分も含めた、その日実際に回したゲーム数。記録用の参考値で、推定計算には使いません。</div>
       </div>
-      <div class="field">
+      ${!isKabaneri ? `<div class="field">
         <label>AT当選回数（初当たり合計）</label>
         <input type="number" id="f-at-count" min="0" inputmode="numeric" value="${values.at_count}">
         <div class="hint">戦国乙女ボーナス直撃・CZ勝利、どちらでのAT当選も合わせた回数。</div>
@@ -348,8 +424,20 @@ export async function renderSettingObservationForm(
         <label>うち戦国乙女ボーナス直撃回数</label>
         <input type="number" id="f-bonus-direct-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bonus_direct_count ?? ""}">
         <div class="hint">設定1:1/21206.7〜設定6:1/5502.7と設定差が大きい要素。数えた日は0回でも「0」を入れると推定に反映されます（空欄なら使いません）。</div>
+      </div>` : `
+      <div class="field">
+        <label>ボーナス初当たり回数（任意）</label>
+        <input type="number" id="f-bonus-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bonus_count ?? ""}">
       </div>
-      <div class="card" id="period-card">
+      <div class="field">
+        <label>ST突入（初当たり）回数（任意）</label>
+        <input type="number" id="f-st-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.st_count ?? ""}">
+      </div>
+      <div class="field">
+        <label>下段ベル回数（任意）</label>
+        <input type="number" id="f-bell-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.bell_count ?? ""}">
+      </div>`}
+      ${hasPeriodLog ? `<div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
         <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
           <div style="flex:1;">
@@ -357,13 +445,13 @@ export async function renderSettingObservationForm(
             <input type="number" id="f-period-game" min="0" inputmode="numeric" placeholder="例: 100">
           </div>
           <button type="button" class="btn" id="period-miss-btn">ハズレ</button>
-          <button type="button" class="btn btn-primary" id="period-hit-btn">AT当選</button>
+          <button type="button" class="btn btn-primary" id="period-hit-btn">${isKabaneri ? "ボーナス当選" : "AT当選"}</button>
         </div>
         <div id="period-log"></div>
         <button type="button" class="btn btn-sm" id="period-undo-btn" style="margin-top:6px;">最後の1件を取消</button>
-      </div>
+      </div>` : ""}
 
-      <div class="card" id="miko-card">
+      ${hasMikoLog ? `<div class="card" id="miko-card">
         <h2 style="margin-top:0;">巫女ポイント0メモ</h2>
         <div class="field" style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
           <div style="flex:1;min-width:7em;">
@@ -382,7 +470,17 @@ export async function renderSettingObservationForm(
         <div class="hint small muted">AT当選まで行った時だけ、周期メモが1周期目からに戻ります（乙女アタックに当選してもATを取れなければ周期はそのまま）。
           乙女アタック当選率の解析値はカンスケ滞在時を除いた数値のため、カンスケ中の分は判別から外します。</div>
         <div id="miko-log"></div>
-      </div>
+      </div>` : ""}
+
+      ${hasKageLog ? `<div class="card" id="kage-card">
+        <h2 style="margin-top:0;">景之STメモ</h2>
+        <div class="hint small muted">復讐の炎に成功したたびに、移行先を記録します。真景之STと裏景之STの合計が突入率の母数です。</div>
+        <div class="field" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn kage-btn" data-ura="0">真景之ST</button>
+          <button type="button" class="btn btn-primary kage-btn" data-ura="1">裏景之ST</button>
+        </div>
+        <div id="kage-log"></div>
+      </div>` : ""}
 
       ${
         atCzKinds.length
@@ -456,7 +554,17 @@ export async function renderSettingObservationForm(
             <label class="small" style="display:flex;align-items:center;gap:6px;margin:2px 0;">
               <input type="checkbox" class="hint-flag" value="${h.value}" ${logs.hint_flags.includes(h.value) ? "checked" : ""}>
               ${escapeHtml(h.label)}
-              <span class="muted">${h.minSetting ? `（設定${h.minSetting}${h.minSetting === 6 ? "" : "以上"}濃厚）` : h.parity === "odd" ? "（奇数示唆）" : "（偶数示唆）"}</span>
+              <span class="muted">${
+                h.minSetting
+                  ? `（設定${h.minSetting}${h.minSetting === 6 ? "" : "以上"}濃厚）`
+                  : h.excludes?.length
+                    ? `（設定${h.excludes.join("・")}否定）`
+                    : h.note
+                      ? `（${escapeHtml(h.note)}）`
+                      : h.parity === "odd"
+                        ? "（奇数示唆）"
+                        : "（偶数示唆）"
+              }</span>
             </label>`
             )
             .join("")}`
@@ -467,30 +575,30 @@ export async function renderSettingObservationForm(
       }
       <div id="autosave-status" class="small muted"></div>
 
-      <div class="field">
+      ${hasMikoLog ? `<div class="field">
         <label>巫女ポイント0到達回数</label>
         <input type="number" id="f-miko-reach-count" min="0" inputmode="numeric" value="${values.miko_reach_count}">
       </div>
       <div class="field">
         <label>うちCZ（乙女アタック）当選回数</label>
         <input type="number" id="f-cz-win-count" min="0" inputmode="numeric" value="${values.cz_win_count}">
-      </div>
-      <div class="field">
-        <label>ボーナス終了画面スタンプ、その日一番高かったもの</label>
+      </div>` : ""}
+      ${reference.ENDING_STAMPS.length ? `<div class="field">
+        <label>${isKabaneri ? "ST終了画面、その日一番高かったもの" : "ボーナス終了画面スタンプ、その日一番高かったもの"}</label>
         <select id="f-max-ending-stamp">${stampOptions}</select>
-      </div>
-      <div class="field">
+      </div>` : ""}
+      ${reference.PAYOUT_OVER_HINTS.length ? `<div class="field">
         <label>終了画面の獲得枚数表示、その日一番高かったもの</label>
         <select id="f-max-payout-over">${payoutOptions}</select>
-      </div>
-      <div class="field">
+      </div>` : ""}
+      ${hasCeilingResetHint ? `<div class="field">
         <label class="small" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="f-ceiling-reset-hint" ${values.ceiling_reset_hint ? "checked" : ""}>
           短縮天井（650G／4周期以内）で強制AT当選するのを見た
         </label>
         <div class="hint">通常の天井は999G・6周期ですが、設定変更があった日はここまで短縮されるとされています。
           設定の高低ではなく「今日、設定が変更された（据え置きではない）」ことの示唆です。</div>
-      </div>
+      </div>` : ""}
       <div class="field">
         <label>メモ</label>
         <textarea id="f-memo" rows="2">${escapeHtml(values.memo)}</textarea>
@@ -515,31 +623,47 @@ export async function renderSettingObservationForm(
 
   /** 周期メモ・巫女メモの表示を描き直し、巫女メモがあれば回数欄をメモからの集計値で上書き（読み取り専用）する。 */
   function refreshLogs() {
-    const periodSummary = reference.summarizePeriodLog(logs.period_log);
-    $("period-current").textContent = `（次は${periodSummary.currentPeriod}周期目）`;
-    $("period-log").innerHTML = renderPeriodSection(reference, periodSummary);
-    $("period-undo-btn").style.display = logs.period_log.length ? "" : "none";
-
-    const mikoSummary = reference.summarizeMikoLog(logs.miko_log);
-    $("miko-log").innerHTML = renderMikoSection(logs.miko_log, mikoSummary);
-    const useMikoLog = logs.miko_log.length > 0;
-    if (useMikoLog) {
-      $("f-miko-reach-count").value = mikoSummary.reachCount;
-      $("f-cz-win-count").value = mikoSummary.winCount;
+    if (hasPeriodLog) {
+      const summarizePeriod = reference.summarizePeriodLog || reference.summarizePeriodStats;
+      const periodSummary = summarizePeriod(logs.period_log);
+      $("period-current").textContent = `（次は${periodSummary.currentPeriod}周期目）`;
+      $("period-log").innerHTML = renderPeriodSection(reference, periodSummary);
+      $("period-undo-btn").style.display = logs.period_log.length ? "" : "none";
     }
-    $("f-miko-reach-count").readOnly = useMikoLog;
-    $("f-cz-win-count").readOnly = useMikoLog;
-    container.querySelectorAll(".miko-del").forEach((btn) =>
-      btn.addEventListener("click", async () => {
-        const [removed] = logs.miko_log.splice(Number(btn.dataset.index), 1);
-        // AT当選の削除は、周期メモ側に自動で入れた区切りエントリも一緒に取り消す。
-        if (removed && removed.id !== null && removed.id !== undefined) {
-          const linkedIndex = logs.period_log.findIndex((p) => p.linked_miko_id === removed.id);
-          if (linkedIndex !== -1) logs.period_log.splice(linkedIndex, 1);
-        }
-        await onLogChanged();
-      })
-    );
+
+    if (hasMikoLog) {
+      const mikoSummary = reference.summarizeMikoLog(logs.miko_log);
+      $("miko-log").innerHTML = renderMikoSection(logs.miko_log, mikoSummary);
+      const useMikoLog = logs.miko_log.length > 0;
+      if (useMikoLog) {
+        $("f-miko-reach-count").value = mikoSummary.reachCount;
+        $("f-cz-win-count").value = mikoSummary.winCount;
+      }
+      $("f-miko-reach-count").readOnly = useMikoLog;
+      $("f-cz-win-count").readOnly = useMikoLog;
+      container.querySelectorAll(".miko-del").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          const [removed] = logs.miko_log.splice(Number(btn.dataset.index), 1);
+          // AT当選の削除は、周期メモ側に自動で入れた区切りエントリも一緒に取り消す。
+          if (removed && removed.id !== null && removed.id !== undefined) {
+            const linkedIndex = logs.period_log.findIndex((p) => p.linked_miko_id === removed.id);
+            if (linkedIndex !== -1) logs.period_log.splice(linkedIndex, 1);
+          }
+          await onLogChanged();
+        })
+      );
+    }
+
+    if (hasKageLog) {
+      const kageSummary = reference.summarizeKageLog(logs.kage_log);
+      $("kage-log").innerHTML = renderKageSection(logs.kage_log, kageSummary);
+      container.querySelectorAll(".kage-del").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          logs.kage_log.splice(Number(btn.dataset.index), 1);
+          await onLogChanged();
+        })
+      );
+    }
     refreshAtCz();
     updateEstimate();
   }
@@ -598,17 +722,19 @@ export async function renderSettingObservationForm(
     $("f-period-game").value = "";
     await onLogChanged();
   }
-  $("period-miss-btn").addEventListener("click", () => addPeriod(false));
-  $("period-hit-btn").addEventListener("click", () => addPeriod(true));
-  $("period-undo-btn").addEventListener("click", async () => {
-    const removed = logs.period_log.pop();
-    // 乙女アタック当選による自動区切りエントリを取り消す場合は、対応する巫女ポイント0メモも一緒に消す。
-    if (removed && removed.linked_miko_id) {
-      const mikoIndex = logs.miko_log.findIndex((m) => m.id === removed.linked_miko_id);
-      if (mikoIndex !== -1) logs.miko_log.splice(mikoIndex, 1);
-    }
-    await onLogChanged();
-  });
+  if (hasPeriodLog) {
+    $("period-miss-btn").addEventListener("click", () => addPeriod(false));
+    $("period-hit-btn").addEventListener("click", () => addPeriod(true));
+    $("period-undo-btn").addEventListener("click", async () => {
+      const removed = logs.period_log.pop();
+      // 乙女アタック当選による自動区切りエントリを取り消す場合は、対応する巫女ポイント0メモも一緒に消す。
+      if (removed && removed.linked_miko_id) {
+        const mikoIndex = logs.miko_log.findIndex((m) => m.id === removed.linked_miko_id);
+        if (mikoIndex !== -1) logs.miko_log.splice(mikoIndex, 1);
+      }
+      await onLogChanged();
+    });
+  }
 
   // 巫女ポイント0 → 乙女アタック当否（won） → AT当否（atWon）。
   async function addMiko(won, atWon = false) {
@@ -630,8 +756,18 @@ export async function renderSettingObservationForm(
     $("f-miko-kansuke").checked = false;
     await onLogChanged();
   }
-  $("miko-win-btn").addEventListener("click", () => addMiko(true, true));
-  $("miko-cz-only-btn").addEventListener("click", () => addMiko(true, false));
+  if (hasMikoLog) {
+    $("miko-win-btn").addEventListener("click", () => addMiko(true, true));
+    $("miko-cz-only-btn").addEventListener("click", () => addMiko(true, false));
+    $("miko-lose-btn").addEventListener("click", () => addMiko(false));
+  }
+
+  container.querySelectorAll(".kage-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      logs.kage_log.push({ id: Date.now(), ura: btn.dataset.ura === "1" });
+      await onLogChanged();
+    })
+  );
 
   // AT中CZメモ：契機を選んで勝利/敗北を押すたびに1件追加して自動保存。
   container.querySelectorAll(".atcz-btn").forEach((btn) =>
@@ -681,10 +817,29 @@ export async function renderSettingObservationForm(
       await autoSave();
     })
   );
-  $("miko-lose-btn").addEventListener("click", () => addMiko(false));
-
   // 打-WINから読み込む：総ゲーム数・通常ゲーム数・終了画面スタンプだけ自動反映し、
   // それ以外は「参考データ」として一覧表示するだけ（用語の意味が完全一致するか未確認なため）。
+  // 将来マイスロのQR内容が確認できた場合も、この関数へ正規化済みデータを渡してフォームを埋める。
+  function applyImportedFormValues(data) {
+    const filled = [];
+    if (data.normalGameCount !== null) {
+      $("f-game-count").value = data.normalGameCount;
+      filled.push("通常ゲーム数");
+    }
+    if (data.totalGameCount !== null) {
+      $("f-total-game-count").value = data.totalGameCount;
+      filled.push("総ゲーム数");
+    }
+    if (data.maxEndingStamp && $("f-max-ending-stamp")) {
+      $("f-max-ending-stamp").value = data.maxEndingStamp;
+      filled.push("終了画面スタンプ");
+    }
+    ["f-game-count", "f-total-game-count", "f-max-ending-stamp"].forEach((id) => {
+      if ($(id)) $(id).dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return filled;
+  }
+
   async function loadDwinData() {
     const url = $("f-dwin-url").value.trim();
     const status = $("dwin-status");
@@ -697,22 +852,7 @@ export async function renderSettingObservationForm(
     status.textContent = "読み込み中...";
     try {
       const data = await fetchDwinData(url, reference);
-      const filled = [];
-      if (data.normalGameCount !== null) {
-        $("f-game-count").value = data.normalGameCount;
-        filled.push("通常ゲーム数");
-      }
-      if (data.totalGameCount !== null) {
-        $("f-total-game-count").value = data.totalGameCount;
-        filled.push("総ゲーム数");
-      }
-      if (data.maxEndingStamp) {
-        $("f-max-ending-stamp").value = data.maxEndingStamp;
-        filled.push("終了画面スタンプ");
-      }
-      ["f-game-count", "f-total-game-count", "f-max-ending-stamp"].forEach((id) => {
-        $(id).dispatchEvent(new Event("change", { bubbles: true }));
-      });
+      const filled = applyImportedFormValues(data);
       status.textContent = filled.length
         ? `反映しました：${filled.join("・")}`
         : "読み込みましたが、反映できる項目が見つかりませんでした。";
@@ -726,38 +866,44 @@ export async function renderSettingObservationForm(
       status.textContent = `読み込めませんでした：${err.message}`;
     }
   }
-  $("dwin-load-btn").addEventListener("click", loadDwinData);
-  $("dwin-qr-btn").addEventListener("click", () => $("dwin-qr-file").click());
-  $("dwin-qr-file").addEventListener("change", async () => {
-    const file = $("dwin-qr-file").files[0];
-    $("dwin-qr-file").value = ""; // 同じ写真を選び直せるようにリセット
-    if (!file) return;
-    const status = $("dwin-status");
-    status.textContent = "QRコードを読み取り中...";
-    try {
-      const text = await decodeQrFromImageFile(file);
-      if (!text) {
-        status.textContent = "QRコードを読み取れませんでした。もう一度試してください。";
-        return;
+  if (supportsDwin) {
+    $("dwin-load-btn").addEventListener("click", loadDwinData);
+    $("dwin-qr-btn").addEventListener("click", () => $("dwin-qr-file").click());
+    $("dwin-qr-file").addEventListener("change", async () => {
+      const file = $("dwin-qr-file").files[0];
+      $("dwin-qr-file").value = ""; // 同じ写真を選び直せるようにリセット
+      if (!file) return;
+      const status = $("dwin-status");
+      status.textContent = "QRコードを読み取り中...";
+      try {
+        const text = await decodeQrFromImageFile(file);
+        if (!text) {
+          status.textContent = "QRコードを読み取れませんでした。もう一度試してください。";
+          return;
+        }
+        $("f-dwin-url").value = text;
+        await loadDwinData();
+      } catch (err) {
+        status.textContent = `QRコードの読み取りに失敗しました：${err.message}`;
       }
-      $("f-dwin-url").value = text;
-      await loadDwinData();
-    } catch (err) {
-      status.textContent = `QRコードの読み取りに失敗しました：${err.message}`;
-    }
-  });
+    });
+  }
 
   [
     "f-game-count",
     "f-total-game-count",
     "f-at-count",
     "f-bonus-direct-count",
+    "f-bonus-count",
+    "f-st-count",
+    "f-bell-count",
     "f-miko-reach-count",
     "f-cz-win-count",
     "f-max-ending-stamp",
     "f-max-payout-over",
     "f-ceiling-reset-hint",
   ].forEach((id) => {
+    if (!$(id)) return;
     $(id).addEventListener("input", updateEstimate);
     $(id).addEventListener("change", updateEstimate);
   });
