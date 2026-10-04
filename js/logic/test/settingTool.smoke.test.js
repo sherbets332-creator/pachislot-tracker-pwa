@@ -869,4 +869,39 @@ await test("観測記録フォーム: 実際の設定（任意）を保存・再
   await assert.rejects(() => updateSettingObservation(db, saved.id, { ...baseForm, actual_setting: "7" }), /1〜6/);
 });
 
+await test("観測記録フォーム: 打-WINの参考データを保存し、開き直しても表示される（推定には使わない）", async (db, container) => {
+  const shopId = await createShop(db, { name: "店R", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  const html = `<!doctype html><html><body><table class="table2"><tbody>
+    <tr><td>総ゲーム数</td><td>6,326 ゲーム</td></tr>
+    <tr><td>通常ゲーム数</td><td>3,290 ゲーム</td></tr>
+    <tr><td>本能寺の変突入回数（確率）</td><td>22 回<br>1/97.9</td></tr>
+    <tr><td>出陣ボーナス回数（確率）</td><td>16 回<br>1/134.6</td></tr>
+  </tbody></table></body></html>`;
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => html });
+  try {
+    container.querySelector("#f-dwin-url").value = "https://dwlite.heiwa.jp/ps/dummy";
+    container.querySelector("#dwin-load-btn").click();
+    await wait();
+  } finally {
+    global.fetch = originalFetch;
+  }
+  container.querySelector("#f-actual-setting").value = "5";
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+
+  const [saved] = await listSettingObservations(db, { shopId, machineId });
+  assert.deepEqual(saved.dwin_rows, [
+    { label: "本能寺の変突入回数（確率）", value: "22 回 / 1/97.9" },
+    { label: "出陣ボーナス回数（確率）", value: "16 回 / 1/134.6" },
+  ]);
+  assert.equal(saved.actual_setting, 5);
+
+  await renderSettingObservationForm(container, db, { observationId: saved.id });
+  assert.match(container.querySelector("#dwin-reference").textContent, /保存済みの打-WINデータ/);
+  assert.match(container.querySelector("#dwin-reference").textContent, /本能寺の変突入回数（確率）：22 回 \/ 1\/97\.9/);
+});
+
 

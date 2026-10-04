@@ -412,6 +412,7 @@ export async function renderSettingObservationForm(
     cz100_log: observation?.cz100_log ?? [],
     pullback_log: observation?.pullback_log ?? [],
     batto_log: observation?.batto_log ?? [],
+    dwin_rows: observation?.dwin_rows ?? [],
     memo: observation?.memo ?? "",
   };
   // 周期メモ・巫女ポイント0メモ・示唆チェック・ストラップ回数は画面上で追記していくので、手元に持つ。
@@ -425,6 +426,7 @@ export async function renderSettingObservationForm(
     cz100_log: [...(values.cz100_log || [])],
     pullback_log: [...(values.pullback_log || [])],
     batto_log: [...(values.batto_log || [])],
+    dwin_rows: [...(values.dwin_rows || [])],
   };
   const isOtome = reference.MACHINE_KEY === "sengoku_otome5";
   const isKabaneri = reference.MACHINE_KEY === "kabaneri2_unato";
@@ -1038,6 +1040,21 @@ export async function renderSettingObservationForm(
     return filled;
   }
 
+  /** 打-WINの参考データ（読み込んだもの・保存済みのもの）を画面に出す。 */
+  function renderDwinReference(rows, caption) {
+    const refBox = $("dwin-reference");
+    if (!refBox) return;
+    refBox.innerHTML = rows.length
+      ? `
+          <div class="small muted" style="margin-top:6px;">${escapeHtml(caption)}</div>
+          <div class="small">${rows.map((r) => `${escapeHtml(r.label)}：${escapeHtml(r.value)}`).join("<br>")}</div>
+        `
+      : "";
+  }
+  if (logs.dwin_rows.length) {
+    renderDwinReference(logs.dwin_rows, "保存済みの打-WINデータ（推定には使いません。設定が分かったときの見比べ用）：");
+  }
+
   async function loadDwinData() {
     const url = $("f-dwin-url").value.trim();
     const status = $("dwin-status");
@@ -1055,10 +1072,11 @@ export async function renderSettingObservationForm(
         ? `反映しました：${filled.join("・")}`
         : "読み込みましたが、反映できる項目が見つかりませんでした。";
       if (data.referenceRows.length) {
-        refBox.innerHTML = `
-          <div class="small muted" style="margin-top:6px;">参考データ（自動反映はしていません。必要なら見て手入力してください）：</div>
-          <div class="small">${data.referenceRows.map((r) => `${escapeHtml(r.label)}：${escapeHtml(r.value)}`).join("<br>")}</div>
-        `;
+        logs.dwin_rows = data.referenceRows.map((r) => ({ label: r.label, value: r.value }));
+        renderDwinReference(
+          logs.dwin_rows,
+          "参考データ（推定には使いません。保存すると、設定が分かったときの見比べ用に残ります）："
+        );
       }
     } catch (err) {
       status.textContent = `読み込めませんでした：${err.message}`;

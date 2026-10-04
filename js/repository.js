@@ -489,6 +489,19 @@ function normalizeKageLog(log) {
   return log.map((entry) => ({ id: entry.id ?? null, ura: Boolean(entry.ura) }));
 }
 
+/**
+ * 打-WINから取り込んだ参考データ（[{label, value}]）を保存用に正規化する。
+ * 推定には使わない（意味が一致するか未確認の項目が多いため）。設定が判明した台のデータを
+ * 後から見比べる（答え合わせ）ための生の記録。ページの統計値だけで、個人を特定する情報は含まれない。
+ */
+function normalizeDwinRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .slice(0, 100)
+    .map((row) => ({ label: String(row?.label ?? "").slice(0, 100), value: String(row?.value ?? "").slice(0, 100) }))
+    .filter((row) => row.label);
+}
+
 /** 汎用の成否メモ（[{id, win}]）を保存用に正規化する。 */
 function normalizeResultLog(log) {
   if (!Array.isArray(log)) return [];
@@ -600,6 +613,7 @@ function buildSettingObservationFields(form) {
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
     // 実際の設定（判明したときだけ入力。空欄＝不明）。推定の答え合わせ用で、計算には使わない。
     actual_setting: parseActualSetting(form.actual_setting),
+    dwin_rows: normalizeDwinRows(form.dwin_rows),
     period_log: normalizePeriodLog(form.period_log),
     miko_log: normalizeMikoLog(form.miko_log),
     at_game_count: atGameCount,
