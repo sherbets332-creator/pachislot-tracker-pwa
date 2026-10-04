@@ -40,6 +40,15 @@ function summarizeEstimateForExport(estimate) {
     setting_labels: estimate.settingLabels,
     likelihood_percent: toPercents(estimate.likelihoods),
     hint_min_setting: estimate.hintMinSetting ?? null,
+    confirmed_setting: estimate.confirmedSetting ?? null,
+    raw_likelihood_percent: estimate.rawLikelihoods ? toPercents(estimate.rawLikelihoods) : null,
+    contributions: (estimate.contributions || []).map((c) => ({
+      key: c.key,
+      label: c.label,
+      strength: c.strength,
+      best_setting: c.bestIndex + 1,
+      likelihood_percent: toPercents(c.likelihoods),
+    })),
     samples: (estimate.samples || []).map((sample) => ({ key: sample.key, label: sample.label, k: sample.k, n: sample.n })),
     alternative_estimates: (estimate.alternativeEstimates || []).map((alt) => ({
       label: alt.label,

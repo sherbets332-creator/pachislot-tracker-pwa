@@ -4,7 +4,13 @@
  * 実行: node js/logic/test/settingInference.test.js
  */
 import assert from "node:assert/strict";
-import { estimateSettingLikelihoods, summarizeEstimateHeadline } from "../settingInference.js";
+import {
+  estimateSettingLikelihoods,
+  summarizeEstimateHeadline,
+  applyConfirmedSetting,
+  summarizeSampleContributions,
+  buildEstimateWithHints,
+} from "../settingInference.js";
 import {
   buildEstimate,
   AT_PROBABILITY,
@@ -284,6 +290,42 @@ test("buildEstimate: 巫女メモがあれば手入力の回数よりメモの�
   });
   assert.equal(e.observedCzRate, 0.5);
   assert.equal(e.mikoSummary.kansukeCount, 1);
+});
+
+test("applyConfirmedSetting: 設定6濃厚の示唆があるときだけ、確率を設定6に固定し、元の推定を残す", () => {
+  const base = { settingLabels: ["1","2","3","4","5","6"], likelihoods: [0.3, 0.2, 0.2, 0.1, 0.1, 0.1], hintMinSetting: 6, samples: [] };
+  const confirmed = applyConfirmedSetting(base);
+  assert.deepEqual(confirmed.likelihoods, [0, 0, 0, 0, 0, 1]);
+  assert.deepEqual(confirmed.rawLikelihoods, [0.3, 0.2, 0.2, 0.1, 0.1, 0.1]);
+  assert.equal(confirmed.confirmedSetting, 6);
+});
+
+test("applyConfirmedSetting: 設定4以上などの範囲のある示唆や、示唆なしでは変えない", () => {
+  const base = { settingLabels: ["1","2","3","4","5","6"], likelihoods: [0.3, 0.2, 0.2, 0.1, 0.1, 0.1], hintMinSetting: 4, samples: [] };
+  assert.equal(applyConfirmedSetting(base), base);
+  const none = { ...base, hintMinSetting: null };
+  assert.equal(applyConfirmedSetting(none), none);
+});
+
+test("summarizeSampleContributions: AT初当たりが設定6寄りなら6寄り・サンプルが少なければ判別力は弱い", () => {
+  const rates = AT_PROBABILITY;
+  const [strong] = summarizeSampleContributions([{ key: "at", label: "AT", k: 40, n: 6000, rates }]);
+  assert.equal(strong.bestIndex, 5);
+  assert.notEqual(strong.strength, "weak");
+  const [weak] = summarizeSampleContributions([{ key: "at", label: "AT", k: 1, n: 300, rates }]);
+  assert.equal(weak.strength, "weak");
+  assert.equal(summarizeSampleContributions([{ label: "x", k: 0, n: 0, rates }]).length, 0);
+});
+
+test("buildEstimateWithHints: 内訳が付き、6濃厚（終了画面極）で確率が6に固定される。示唆なしなら変わらない", () => {
+  const ref = getReferenceByKey("sengoku_otome5");
+  const plain = buildEstimateWithHints(ref, { game_count: 4365, at_count: 19, miko_reach_count: 30, cz_win_count: 7 });
+  assert.equal(plain.contributions.length, plain.samples.length);
+  assert.equal(plain.confirmedSetting, undefined);
+  const withStamp = buildEstimateWithHints(ref, { game_count: 4365, at_count: 19, miko_reach_count: 30, cz_win_count: 7, max_ending_stamp: "kiwami" });
+  assert.deepEqual(withStamp.likelihoods, [0, 0, 0, 0, 0, 1]);
+  assert.equal(withStamp.rawLikelihoods.length, 6);
+  assert.equal(summarizeEstimateHeadline(withStamp), "設定6以上濃厚");
 });
 
 console.log(`\n${passCount} 件成功`);

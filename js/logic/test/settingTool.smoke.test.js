@@ -940,4 +940,26 @@ await test("観測記録フォーム: 戦国乙女5のAT当選回数は周期メ
   assert.equal(atInput.readOnly, false);
 });
 
+await test("観測記録フォーム: 推定パネルに要素ごとの内訳が出て、設定6濃厚（終了画面「極」）ならバーが設定6に固定される", async (db, container) => {
+  const shopId = await createShop(db, { name: "店T", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-game-count").value = "4365";
+  container.querySelector("#f-at-count").value = "19";
+  fireEvent(container.querySelector("#f-game-count"), "input");
+  await wait();
+  let panel = container.querySelector("#estimate-panel").textContent;
+  assert.match(panel, /要素ごとの内訳/);
+  assert.match(panel, /AT初当たり/);
+  assert.match(panel, /判別力/);
+  assert.ok(!panel.includes("に固定しています"));
+
+  container.querySelector("#f-max-ending-stamp").value = "kiwami";
+  fireEvent(container.querySelector("#f-max-ending-stamp"), "change");
+  await wait();
+  panel = container.querySelector("#estimate-panel").textContent;
+  assert.match(panel, /設定6濃厚の示唆があるため、上のバーは設定6に固定しています/);
+  assert.match(panel, /設定6以上濃厚/);
+});
+
 

@@ -86,6 +86,11 @@ mainブランチにpushすると自動で再デプロイされる。
   自動で同期して読み取り専用になる（`syncAtCountFromPeriodLog`）。真強カワRUSH直撃など周期メモに無いAT当選は、
   周期メモに「AT当選」として足す運用。周期メモが空なら従来どおり手入力。遊技中は通常ゲーム数が未入力（0）の
   まま自動保存されるので、`at_count > game_count`の検証は通常ゲーム数が1以上のときだけ行う
+- 画面・一覧・匿名書き出しは`reference.buildEstimate`を直接呼ばず、`settingInference.js`の`buildEstimateWithHints(reference, obs)`を使う。
+  共通の後処理として、①`contributions`（要素ごとの内訳。各`samples`だけを見たときの設定寄り・判別力 弱/中/強）を付け、
+  ②`hintMinSetting`が6（設定6濃厚）のときだけ`likelihoods`を設定6に固定する（元の推定は`rawLikelihoods`、`confirmedSetting`）。
+  「設定4以上濃厚」など範囲のある示唆は、ユーザーの了承が設定6確定のときだけだったので、バーには反映していない。
+  各機種の`buildEstimate`が返す`samples`は`{key,label,k,n,rates}`を持つ契約（内訳の計算に使う）
 - QRコード読み取り(`js/ui/qrScan.js`)は`js/vendor/jsQR.js`（Apache-2.0、vendored）を使う。250KB程度と
   重いので、アプリ起動時には読み込まず、実際にQR読み取りボタンを押した時だけ動的に`<script>`タグで
   読み込む（`ensureJsQRLoaded`）。新しい外部ライブラリを同梱する場合も`js/vendor/`に置き、

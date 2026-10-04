@@ -14,7 +14,7 @@ import {
   ValidationError,
 } from "../repository.js";
 import { getReferenceByMachineName } from "../logic/settingReference/index.js";
-import { summarizeEstimateHeadline } from "../logic/settingInference.js";
+import { summarizeEstimateHeadline, buildEstimateWithHints } from "../logic/settingInference.js";
 import { fetchDwinData } from "../dwinImport.js";
 import { decodeQrFromImageFile } from "../ui/qrScan.js";
 import { escapeHtml, todayDateString } from "../ui/format.js";
@@ -66,6 +66,31 @@ function renderLikelihoodBars(settingLabels, likelihoods) {
     .join("");
 }
 
+const STRENGTH_LABELS = { weak: "弱（ほぼ平ら）", medium: "中", strong: "強" };
+
+/** 要素ごとの内訳：その要素だけを見たとき、どの設定寄りか・どれくらい判別力があるか。 */
+function renderContributions(estimate) {
+  const rows = (estimate.contributions || []).map((c) => {
+    const best = (estimate.settingLabels || [])[c.bestIndex] ?? "";
+    const observed = c.k !== undefined ? `${c.k}/${c.n}` : "";
+    const percents = (c.likelihoods || []).map((v) => Math.round((v || 0) * 100)).join("／");
+    const direction = c.strength === "weak" ? "どの設定とも言えない" : `${best}寄り`;
+    return `
+      <div style="margin-bottom:6px;">
+        <div class="small"><strong>${escapeHtml(c.label)}</strong>　${escapeHtml(observed)}（${c.observedRate >= 0.05 ? formatPercent(c.observedRate) : formatRateAsFraction(c.observedRate)}）</div>
+        <div class="small">→ ${escapeHtml(direction)}　判別力：${STRENGTH_LABELS[c.strength]}</div>
+        <div class="small muted">設定1〜6：${percents}（%）</div>
+      </div>`;
+  });
+  if (rows.length === 0) return "";
+  return `
+    <div style="margin-top:10px;">
+      <div class="fw-bold" style="margin-bottom:4px;">要素ごとの内訳</div>
+      <div class="small muted" style="margin-bottom:6px;">各要素だけを見たときの傾向です。「弱」はサンプルが少なくて、ほぼ何も言えない要素です。</div>
+      ${rows.join("")}
+    </div>`;
+}
+
 function renderEstimatePanel(reference, estimate) {
   const headline = summarizeEstimateHeadline(estimate);
   const observedSummary = estimate.observedMetrics
@@ -84,6 +109,10 @@ function renderEstimatePanel(reference, estimate) {
         ／
         CZ当選率実測：${estimate.observedCzRate !== null ? formatPercent(estimate.observedCzRate) : "データ無し"}`;
   const bars = renderLikelihoodBars(estimate.settingLabels, estimate.likelihoods);
+  const confirmedNote = estimate.confirmedSetting
+    ? `<div class="alert" style="margin-top:8px;">設定${estimate.confirmedSetting}濃厚の示唆があるため、上のバーは設定${estimate.confirmedSetting}に固定しています。示唆を除いた、数値だけの推定は次のとおりです。
+        ${renderLikelihoodBars(estimate.settingLabels, estimate.rawLikelihoods || [])}</div>`
+    : "";
 
   return `
     <div class="card">
@@ -103,6 +132,8 @@ function renderEstimatePanel(reference, estimate) {
         ${observedSummary}
       </div>
       ${bars}
+      ${confirmedNote}
+      ${renderContributions(estimate)}
       ${(estimate.alternativeEstimates || [])
         .map(
           (alternative) => `
@@ -783,7 +814,7 @@ export async function renderSettingObservationForm(
     const current = readForm(container, logs);
     keepScrollPosition(() => {
       try {
-        const estimate = reference.buildEstimate(current);
+        const estimate = buildEstimateWithHints(reference, current);
         estimatePanel.innerHTML = renderEstimatePanel(reference, estimate);
       } catch (err) {
         estimatePanel.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
@@ -1178,7 +1209,7 @@ export async function renderSettingObservationForm(
     const current = readForm(container, logs);
     let estimate = null;
     try {
-      estimate = reference.buildEstimate(current);
+      estimate = buildEstimateWithHints(reference, current);
     } catch {
       estimate = null;
     }

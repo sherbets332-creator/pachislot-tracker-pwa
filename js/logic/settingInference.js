@@ -76,3 +76,61 @@ export function summarizeEstimateHeadline(estimate) {
   const pct = Math.round((likelihoods[maxIndex] || 0) * 100);
   return `${label}寄り（${pct}%）`;
 }
+
+/**
+ * 「設定6濃厚」の示唆が出ているときだけ、推定の確率を設定6に固定する（機種非依存）。
+ * 設定6は上限なので、「設定6以上」＝設定6確定として扱える。「設定4以上濃厚」などは、
+ * 範囲が残るのでバーには反映しない（別表示のまま）。
+ * 示唆を除いた、数値だけの推定は `rawLikelihoods` に残す（食い違いを見比べられるように）。
+ */
+export function applyConfirmedSetting(estimate) {
+  if (!estimate || estimate.hintMinSetting !== 6) return estimate;
+  const settingCount = (estimate.likelihoods || []).length || 6;
+  const confirmed = new Array(settingCount).fill(0);
+  confirmed[settingCount - 1] = 1;
+  return { ...estimate, rawLikelihoods: estimate.likelihoods, likelihoods: confirmed, confirmedSetting: settingCount };
+}
+
+/**
+ * 要素（サンプル）ごとに、その要素だけを見たときに「どの設定寄りか」と判別力の強さを返す。
+ * 判別力 = 最も出やすい設定と最も出にくい設定の尤度の比（ratio）。
+ * 1.5倍未満＝弱（ほぼ平ら。まだ何も言えない）、4倍未満＝中、4倍以上＝強。
+ *
+ * @param {{key?:string,label:string,k:number,n:number,rates:number[]}[]} samples
+ */
+export function summarizeSampleContributions(samples = []) {
+  return samples
+    .filter((sample) => sample && sample.n > 0 && Array.isArray(sample.rates))
+    .map((sample) => {
+      const likelihoods = estimateSettingLikelihoods([sample]);
+      let bestIndex = 0;
+      let worstIndex = 0;
+      for (let i = 1; i < likelihoods.length; i += 1) {
+        if (likelihoods[i] > likelihoods[bestIndex]) bestIndex = i;
+        if (likelihoods[i] < likelihoods[worstIndex]) worstIndex = i;
+      }
+      const ratio = likelihoods[worstIndex] > 0 ? likelihoods[bestIndex] / likelihoods[worstIndex] : Infinity;
+      const strength = ratio < 1.5 ? "weak" : ratio < 4 ? "medium" : "strong";
+      return {
+        key: sample.key ?? null,
+        label: sample.label,
+        k: sample.k,
+        n: sample.n,
+        observedRate: sample.k / sample.n,
+        likelihoods,
+        bestIndex,
+        ratio,
+        strength,
+      };
+    });
+}
+
+/**
+ * 機種モジュールの buildEstimate に、共通の後処理（設定6濃厚の反映・要素ごとの内訳）をつけた結果を返す。
+ * 画面（フォーム・一覧）・匿名書き出しは、reference.buildEstimate を直接呼ばずこちらを使う。
+ */
+export function buildEstimateWithHints(reference, observation) {
+  const estimate = reference.buildEstimate(observation);
+  const withContributions = { ...estimate, contributions: summarizeSampleContributions(estimate.samples) };
+  return applyConfirmedSetting(withContributions);
+}

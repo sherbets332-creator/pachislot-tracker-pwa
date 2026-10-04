@@ -4,7 +4,7 @@
  */
 import { listAllShops, listAllMachines, listSettingObservations, bulkCreateMachines } from "../repository.js";
 import { getReferenceByMachineName, REFERENCES } from "../logic/settingReference/index.js";
-import { summarizeEstimateHeadline } from "../logic/settingInference.js";
+import { summarizeEstimateHeadline, buildEstimateWithHints } from "../logic/settingInference.js";
 import { commas, escapeHtml } from "../ui/format.js";
 import { buildUrl, navigate } from "../router.js";
 import { renderFlash, setFlash } from "../ui/flash.js";
@@ -58,7 +58,7 @@ export async function renderSettingTool(container, db, query) {
       const listHtml = observations.length
         ? `<div class="list">${observations
             .map((o) => {
-              const estimate = reference.buildEstimate(o);
+              const estimate = buildEstimateWithHints(reference, o);
               const headline = summarizeEstimateHeadline(estimate);
               return `
             <a class="list-item" href="${buildUrl(`/setting-tool/${o.id}/edit`)}" style="text-decoration:none;color:inherit;display:block;">
