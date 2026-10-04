@@ -68,6 +68,7 @@ export async function renderSettingTool(container, db, query) {
                 ${o.max_ending_stamp && o.max_ending_stamp !== "none" ? ` ／ 終了画面示唆あり` : ""}
               </div>
               ${headline ? `<div class="small" style="margin-top:2px;"><strong>${escapeHtml(headline)}</strong></div>` : ""}
+              ${o.actual_setting ? `<div class="small" style="margin-top:2px;">実際の設定：設定${o.actual_setting}</div>` : ""}
               ${estimate.settingChangeHint ? `<div class="small" style="margin-top:2px;">⚠ 設定変更の示唆あり</div>` : ""}
             </a>`;
             })

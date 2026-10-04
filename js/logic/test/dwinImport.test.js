@@ -6,7 +6,8 @@
  */
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { extractTableRows, extractStampImageNames, matchEndingStampFromImages, parseDwinDocument } from "../../dwinImport.js";
+import { extractTableRows, extractStampImageNames, matchEndingStampFromImages, parseDwinDocument, deriveGameCountFromRateRow } from "../../dwinImport.js";
+import * as sengokuOtome5 from "../settingReference/sengokuOtome5.js";
 import { ENDING_STAMPS } from "../settingReference/sengokuOtome5.js";
 
 let passCount = 0;
@@ -99,6 +100,41 @@ test("parseDwinDocument: 何も一致しなければnull／空配列を返す（
   assert.equal(result.normalGameCount, null);
   assert.equal(result.maxEndingStamp, null);
   assert.deepEqual(result.referenceRows, []);
+});
+
+
+// 実際のページ（2026-10）の項目名・値の書式に合わせたサンプル
+const RATE_ROWS_HTML = `<!doctype html><html><body><table class="table2"><tbody>
+  <tr><td>総ゲーム数</td><td>7,048 ゲーム</td></tr>
+  <tr><td>通常ゲーム数</td><td>4,365 ゲーム</td></tr>
+  <tr><td>強カワRUSH突入回数（確率）</td><td>17 回<br>1/256.8</td></tr>
+  <tr><td>本能寺の変突入回数（確率）</td><td>11 回<br>1/138.5</td></tr>
+  <tr><td>本能寺の変　連戦突入回数（確率）</td><td>1 回<br>9.1 %</td></tr>
+  <tr><td>カシンバトル　連戦突入回数（確率）</td><td>-<br>0.0 %</td></tr>
+</tbody></table></body></html>`;
+
+test("deriveGameCountFromRateRow: 回数×確率の分母でゲーム数を逆算する（11回・1/138.5 → 約1,524G）", () => {
+  const rows = extractTableRows(new JSDOM(RATE_ROWS_HTML).window.document);
+  const derived = deriveGameCountFromRateRow(rows, "本能寺の変突入回数（確率）");
+  assert.equal(derived.count, 11);
+  assert.equal(derived.denominator, 138.5);
+  assert.equal(derived.value, 1524);
+});
+
+test("deriveGameCountFromRateRow: 確率が1/Xの形でない行（%表記・回数なし）や無い行はnull", () => {
+  const rows = extractTableRows(new JSDOM(RATE_ROWS_HTML).window.document);
+  assert.equal(deriveGameCountFromRateRow(rows, "本能寺の変　連戦突入回数（確率）"), null);
+  assert.equal(deriveGameCountFromRateRow(rows, "カシンバトル　連戦突入回数（確率）"), null);
+  assert.equal(deriveGameCountFromRateRow(rows, "存在しない行"), null);
+});
+
+test("parseDwinDocument: 機種がDWIN_AT_GAME_SOURCEを持てば、AT中ゲーム数を逆算して返す（持たない機種はnull）", () => {
+  const doc = new JSDOM(RATE_ROWS_HTML).window.document;
+  const withSource = parseDwinDocument(doc, sengokuOtome5);
+  assert.equal(withSource.atGameCountDerived.value, 1524);
+  assert.equal(withSource.atGameCountDerived.scopeLabel, "強カワRUSH中");
+  const withoutSource = parseDwinDocument(doc, { ENDING_STAMPS: [] });
+  assert.equal(withoutSource.atGameCountDerived, null);
 });
 
 console.log(`\n${passCount} 件成功`);

@@ -818,4 +818,55 @@ await test("観測記録フォーム: 匿名書き出し（コピー）に店舗
   assert.match(container.querySelector("#anon-export-status").textContent, /コピーしました/);
 });
 
-console.log(`\n${passCount} 件成功`);
+console.log(`\n${passCount} 件成功`);await test("観測記録フォーム: 打-WINの本能寺突入回数・確率からAT中ゲーム数を逆算して入れる（手入力済みなら上書きしない）", async (db, container) => {
+  const shopId = await createShop(db, { name: "店P", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  const html = `<!doctype html><html><body><table class="table2"><tbody>
+    <tr><td>総ゲーム数</td><td>7,048 ゲーム</td></tr>
+    <tr><td>通常ゲーム数</td><td>4,365 ゲーム</td></tr>
+    <tr><td>本能寺の変突入回数（確率）</td><td>11 回<br>1/138.5</td></tr>
+  </tbody></table></body></html>`;
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => html });
+  try {
+    container.querySelector("#f-dwin-url").value = "https://dwlite.heiwa.jp/ps/dummy";
+    container.querySelector("#dwin-load-btn").click();
+    await wait();
+    assert.equal(container.querySelector("#f-at-game-count").value, "1524");
+    assert.match(container.querySelector("#dwin-status").textContent, /AT中ゲーム数/);
+
+    // 手で数えた値があれば上書きしない
+    container.querySelector("#f-at-game-count").value = "1600";
+    container.querySelector("#dwin-load-btn").click();
+    await wait();
+    assert.equal(container.querySelector("#f-at-game-count").value, "1600");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+await test("観測記録フォーム: 実際の設定（任意）を保存・再表示でき、範囲外はエラー。匿名書き出しにも入る", async (db, container) => {
+  const shopId = await createShop(db, { name: "店Q", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-game-count").value = "1000";
+  container.querySelector("#f-actual-setting").value = "3";
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+  const [saved] = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(saved.actual_setting, 3);
+
+  await renderSettingObservationForm(container, db, { observationId: saved.id });
+  assert.equal(container.querySelector("#f-actual-setting").value, "3");
+
+  // 未入力＝不明（null）。範囲外（7）はエラー。
+  const { updateSettingObservation } = await import("../../repository.js");
+  const baseForm = { machine_key: "sengoku_otome5", shop_id: shopId, machine_id: machineId, play_date: "2026-10-03", game_count: "1000" };
+  await updateSettingObservation(db, saved.id, { ...baseForm, actual_setting: "" });
+  const [cleared] = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(cleared.actual_setting, null);
+  await assert.rejects(() => updateSettingObservation(db, saved.id, { ...baseForm, actual_setting: "7" }), /1〜6/);
+});
+
+

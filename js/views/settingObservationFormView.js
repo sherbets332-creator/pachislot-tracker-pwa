@@ -340,6 +340,7 @@ function readForm(container, logs = null) {
     ceiling_reset_hint: container.querySelector("#f-ceiling-reset-hint")?.checked ?? false,
     at_game_count: container.querySelector("#f-at-game-count")?.value ?? "",
     memo: val("f-memo"),
+    actual_setting: val("f-actual-setting"),
   };
 }
 
@@ -405,6 +406,7 @@ export async function renderSettingObservationForm(
     hint_flags: observation?.hint_flags ?? [],
     strap_counts: observation?.strap_counts ?? {},
     at_game_count: observation?.at_game_count ?? "", // 空欄＝総ゲーム数−通常ゲーム数の目安を使う
+    actual_setting: observation?.actual_setting ?? "",
     at_cz_log: observation?.at_cz_log ?? [],
     kage_log: observation?.kage_log ?? [],
     cz100_log: observation?.cz100_log ?? [],
@@ -742,6 +744,14 @@ export async function renderSettingObservationForm(
           設定の高低ではなく「今日、設定が変更された（据え置きではない）」ことの示唆です。</div>
       </div>` : ""}
       <div class="field">
+        <label>実際の設定（判明したら。任意）</label>
+        <select id="f-actual-setting">
+          <option value="">不明</option>
+          ${[1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${String(values.actual_setting) === String(n) ? "selected" : ""}>設定${n}</option>`).join("")}
+        </select>
+        <div class="hint">推定の答え合わせ用です（計算には使いません）。後から入力・変更できます。</div>
+      </div>
+      <div class="field">
         <label>メモ</label>
         <textarea id="f-memo" rows="2">${escapeHtml(values.memo)}</textarea>
       </div>
@@ -1015,7 +1025,14 @@ export async function renderSettingObservationForm(
       $("f-max-ending-stamp").value = data.maxEndingStamp;
       filled.push("終了画面スタンプ");
     }
-    ["f-game-count", "f-total-game-count", "f-max-ending-stamp"].forEach((id) => {
+    // AT中ゲーム数：手で入れた値があればそれを優先し、空欄のときだけ打-WINの分母から逆算した値を入れる。
+    if (data.atGameCountDerived && $("f-at-game-count")) {
+      if ($("f-at-game-count").value === "") {
+        $("f-at-game-count").value = data.atGameCountDerived.value;
+        filled.push(`AT中ゲーム数（${data.atGameCountDerived.scopeLabel}・打-WINの確率から逆算）`);
+      }
+    }
+    ["f-game-count", "f-total-game-count", "f-max-ending-stamp", "f-at-game-count"].forEach((id) => {
       if ($(id)) $(id).dispatchEvent(new Event("change", { bubbles: true }));
     });
     return filled;

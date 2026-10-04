@@ -507,6 +507,13 @@ function normalizeStrapCounts(counts) {
   return result;
 }
 
+function parseActualSetting(raw) {
+  if (raw === null || raw === undefined || String(raw).trim() === "") return null;
+  const value = parseIntField(String(raw), "実際の設定", { required: false, minimum: 1 });
+  if (value > 6) throw new ValidationError("実際の設定は1〜6で入力してください。");
+  return value;
+}
+
 function buildSettingObservationFields(form) {
   const parseOptionalCount = (raw, label) =>
     raw === null || raw === undefined || String(raw).trim() === ""
@@ -591,6 +598,8 @@ function buildSettingObservationFields(form) {
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),
+    // 実際の設定（判明したときだけ入力。空欄＝不明）。推定の答え合わせ用で、計算には使わない。
+    actual_setting: parseActualSetting(form.actual_setting),
     period_log: normalizePeriodLog(form.period_log),
     miko_log: normalizeMikoLog(form.miko_log),
     at_game_count: atGameCount,

@@ -73,6 +73,12 @@ mainブランチにpushすると自動で再デプロイされる。
   追加する前に、必ず理論値（`AT_PROBABILITY`等）と桁が合うか検算すること。スタンプ画像ファイル名
   （`ENDING_STAMPS`の`dwinImageNames`）は「可(ka)」「吉(kiti)」「優(yu)」のみ実例で確認済みで、
   「良」「極」は未確認の推測（コメント参照）
+- 打-WINの「N 回／1/X」形式の行は、N×Xで確率の分母のゲーム数を逆算できる（`deriveGameCountFromRateRow`）。
+  機種モジュールが任意の`DWIN_AT_GAME_SOURCE = { rowLabel, scopeLabel }`を持てば、その行の分母を「AT中ゲーム数」
+  として入力欄に入れる（手入力済みなら上書きしない）。戦国乙女5は「本能寺の変突入回数（確率）」＝強カワRUSH中の
+  ゲーム数（実機データ: 11回・1/138.5 → 約1,524G。「総−通常」の目安は2,683Gで大きくずれていた）
+- 観測記録の`actual_setting`（1〜6、不明はnull）は、推定の答え合わせ用に後から入れる任意項目。推定計算には使わない。
+  匿名書き出し（`js/logic/anonymousExport.js`、店舗名・台番号・メモ・正確な日付は含めない）には残る
 - QRコード読み取り(`js/ui/qrScan.js`)は`js/vendor/jsQR.js`（Apache-2.0、vendored）を使う。250KB程度と
   重いので、アプリ起動時には読み込まず、実際にQR読み取りボタンを押した時だけ動的に`<script>`タグで
   読み込む（`ensureJsQRLoaded`）。新しい外部ライブラリを同梱する場合も`js/vendor/`に置き、

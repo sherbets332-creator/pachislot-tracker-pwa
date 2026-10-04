@@ -64,6 +64,11 @@ test("判別の材料と推定結果は残る", () => {
   assert.ok(exported.estimate.samples.length > 0);
 });
 
+test("実際の設定（答え合わせ用）は書き出しに残る", () => {
+  const exported = buildAnonymousObservationExport({ ...observation, actual_setting: 3 }, sengokuOtome5, null);
+  assert.equal(exported.observation.actual_setting, 3);
+});
+
 test("元の観測記録オブジェクトは書き換えない", () => {
   buildAnonymousObservationExport(observation, sengokuOtome5, null);
   assert.equal(observation.shop_id, 3);

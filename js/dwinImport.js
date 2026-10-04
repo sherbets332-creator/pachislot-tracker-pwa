@@ -46,6 +46,22 @@ function parseGameCountText(text) {
   return digits ? Number(digits[0]) : null;
 }
 
+/**
+ * 「N 回 / 1/X」の形式の行（例:「本能寺の変突入回数（確率）」=「11 回 / 1/138.5」）から、
+ * 確率の分母になっているゲーム数を逆算する（N × X。11 × 138.5 ≒ 1,524G）。
+ * 回数か確率が読めない行（「- / 0.0 %」など）はnull。
+ */
+export function deriveGameCountFromRateRow(rows, rowLabel) {
+  const text = findRowValue(rows, rowLabel);
+  if (!text) return null;
+  const match = text.match(/(\d[\d,]*)\s*回.*?1\s*\/\s*(\d[\d,]*(?:\.\d+)?)/);
+  if (!match) return null;
+  const count = Number(match[1].replace(/,/g, ""));
+  const denominator = Number(match[2].replace(/,/g, ""));
+  if (!(count > 0) || !(denominator > 0)) return null;
+  return { count, denominator, value: Math.round(count * denominator) };
+}
+
 /** スタンプ画像（stamp_wrapa_item_img／stamp_wrapb_item_img）のファイル名（拡張子抜き）一覧を返す。 */
 export function extractStampImageNames(doc) {
   const names = [];
@@ -77,7 +93,8 @@ export function matchEndingStampFromImages(endingStamps, imageNames) {
  * @param {Document} doc
  * @param {{ENDING_STAMPS: object[]}} reference 対象機種のsettingReferenceモジュール
  * @returns {{totalGameCount: number|null, normalGameCount: number|null,
- *            maxEndingStamp: string|null, referenceRows: {label:string, value:string}[]}}
+ *            maxEndingStamp: string|null, atGameCountDerived: {value:number, scopeLabel:string}|null,
+ *            referenceRows: {label:string, value:string}[]}}
  */
 export function parseDwinDocument(doc, reference) {
   const rows = extractTableRows(doc);
@@ -89,7 +106,12 @@ export function parseDwinDocument(doc, reference) {
   // 総ゲーム数・通常ゲーム数として自動反映に使った2行は、参考データの一覧からは除く（二重表示防止）。
   const referenceRows = rows.filter((r) => r.label !== "総ゲーム数" && r.label !== "通常ゲーム数");
 
-  return { totalGameCount, normalGameCount, maxEndingStamp, referenceRows };
+  // AT中ゲーム数：機種モジュールが「どの行の分母がAT中ゲーム数に当たるか」を持っている場合だけ逆算する。
+  const source = reference?.DWIN_AT_GAME_SOURCE;
+  const derived = source ? deriveGameCountFromRateRow(rows, source.rowLabel) : null;
+  const atGameCountDerived = derived ? { ...derived, scopeLabel: source.scopeLabel, rowLabel: source.rowLabel } : null;
+
+  return { totalGameCount, normalGameCount, maxEndingStamp, atGameCountDerived, referenceRows };
 }
 
 /**

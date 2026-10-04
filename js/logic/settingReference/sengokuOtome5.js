@@ -162,6 +162,13 @@ export const AT_CZ_TRIGGERS = [
   { value: "other", label: "その他" },
 ];
 
+/**
+ * 打-WINの「本能寺の変突入回数（確率）」の確率は、強カワRUSH中のゲーム数を分母にしている
+ * （実機データ 11回・1/138.5 → 約1,524G。同ページの強カワRUSH突入17回＋真強カワRUSH3回の関係とも整合）。
+ * この分母を、AT中CZメモの突入率の「AT中ゲーム数」として使う（総ゲーム数−通常ゲーム数の目安より正確）。
+ */
+export const DWIN_AT_GAME_SOURCE = { rowLabel: "本能寺の変突入回数（確率）", scopeLabel: "強カワRUSH中" };
+
 export const AT_CZ_KINDS = [
   { key: "honnoji", label: "本能寺の変", shortLabel: "本能寺", setting1EntryRate: 1 / 114.8, setting1WinRate: 0.5 },
   { key: "kashin", label: "カシンバトル", shortLabel: "カシン", setting1EntryRate: null, setting1WinRate: 0.5 },
