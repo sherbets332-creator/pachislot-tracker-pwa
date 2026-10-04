@@ -19,6 +19,11 @@ import { fetchDwinData } from "../dwinImport.js";
 import { decodeQrFromImageFile } from "../ui/qrScan.js";
 import { escapeHtml, todayDateString } from "../ui/format.js";
 import { setFlash } from "../ui/flash.js";
+import {
+  buildAnonymousObservationExport,
+  buildAnonymousExportFilename,
+  EXPORT_DESCRIPTION,
+} from "../logic/anonymousExport.js";
 import { buildUrl, navigate } from "../router.js";
 
 function formatPercent(value, digits = 1) {
@@ -743,6 +748,16 @@ export async function renderSettingObservationForm(
 
       <div id="estimate-panel"></div>
 
+      <div class="card" id="anonymous-export-card">
+        <div class="fw-bold">匿名で書き出す</div>
+        <div class="small muted">含む：${escapeHtml(EXPORT_DESCRIPTION.included)}<br>含まない：${escapeHtml(EXPORT_DESCRIPTION.excluded)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          <button type="button" class="btn btn-sm" id="anon-export-file-btn">ファイルに書き出す</button>
+          <button type="button" class="btn btn-sm" id="anon-export-copy-btn">コピーする</button>
+        </div>
+        <div class="small muted" id="anon-export-status"></div>
+      </div>
+
       <button type="submit" class="btn btn-primary">保存</button>
       <a class="btn" href="${buildUrl("/setting-tool", { shop_id: shopId, machine_id: machineId })}">戻る</a>
       ${isEdit ? '<button type="button" class="btn btn-danger" id="delete-btn" style="float:right;">削除</button>' : ""}
@@ -1101,6 +1116,41 @@ export async function renderSettingObservationForm(
       } else {
         throw err;
       }
+    }
+  });
+
+  function buildAnonymousExportJson() {
+    const current = readForm(container, logs);
+    let estimate = null;
+    try {
+      estimate = reference.buildEstimate(current);
+    } catch {
+      estimate = null;
+    }
+    const exported = buildAnonymousObservationExport(current, reference, estimate);
+    return { exported, json: JSON.stringify(exported, null, 2) };
+  }
+
+  $("anon-export-file-btn").addEventListener("click", () => {
+    const { exported, json } = buildAnonymousExportJson();
+    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = buildAnonymousExportFilename(exported);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    $("anon-export-status").textContent = `書き出しました：${a.download}`;
+  });
+
+  $("anon-export-copy-btn").addEventListener("click", async () => {
+    const { json } = buildAnonymousExportJson();
+    try {
+      await navigator.clipboard.writeText(json);
+      $("anon-export-status").textContent = "コピーしました。そのまま貼り付けてください。";
+    } catch {
+      $("anon-export-status").textContent = "コピーできませんでした。「ファイルに書き出す」を使ってください。";
     }
   });
 

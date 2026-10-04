@@ -789,4 +789,33 @@ await test("観測記録フォーム: 入力で推定パネルを描き直して
   assert.equal(scrolledTo, 500);
 });
 
+await test("観測記録フォーム: 匿名書き出し（コピー）に店舗名・台番号・メモ・正確な日付が入らない", async (db, container) => {
+  const shopId = await createShop(db, { name: "秘密ホール本店", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-play-date").value = "2026-10-03";
+  container.querySelector("#f-machine-number").value = "656";
+  container.querySelector("#f-game-count").value = "2816";
+  container.querySelector("#f-at-count").value = "11";
+  container.querySelector("#f-memo").value = "秘密ホール本店の656番、朝イチ";
+
+  let copied = null;
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: async (text) => { copied = text; } } },
+  });
+  container.querySelector("#anon-export-copy-btn").click();
+  await wait();
+
+  assert.ok(copied, "コピーされていない");
+  assert.ok(!copied.includes("秘密ホール"));
+  assert.ok(!copied.includes("656"));
+  assert.ok(!copied.includes("2026-10-03"));
+  const parsed = JSON.parse(copied);
+  assert.equal(parsed.play_year_month, "2026-10");
+  assert.equal(parsed.observation.game_count, "2816");
+  assert.equal(parsed.machine_key, "sengoku_otome5");
+  assert.match(container.querySelector("#anon-export-status").textContent, /コピーしました/);
+});
+
 console.log(`\n${passCount} 件成功`);
