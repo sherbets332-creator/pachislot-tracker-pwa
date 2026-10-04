@@ -505,7 +505,7 @@ export async function renderSettingObservationForm(
       ${isOtome ? `<div class="field">
         <label>AT当選回数（初当たり合計）</label>
         <input type="number" id="f-at-count" min="0" inputmode="numeric" value="${values.at_count}">
-        <div class="hint">戦国乙女ボーナス直撃・CZ勝利、どちらでのAT当選も合わせた回数。</div>
+        <div class="hint" id="at-count-hint">戦国乙女ボーナス直撃・CZ勝利、どちらでのAT当選も合わせた回数。</div>
       </div>
       <div class="field">
         <label>うち戦国乙女ボーナス直撃回数</label>
@@ -796,6 +796,25 @@ export async function renderSettingObservationForm(
     keepScrollPosition(refreshLogsBody);
   }
 
+  /**
+   * 戦国乙女5：周期メモに1件でも記録があれば、AT当選回数を周期メモの「AT当選」の件数に合わせる（読み取り専用）。
+   * 巫女ポイント0でAT当選した分は、周期メモ側にも自動で区切りが入るので重複しない。
+   * 周期メモの無い使い方（手入力だけ）のときは、従来どおり手入力できる。
+   */
+  function syncAtCountFromPeriodLog() {
+    const atCountInput = $("f-at-count");
+    if (!isOtome || !atCountInput) return;
+    const useLog = logs.period_log.length > 0;
+    if (useLog) atCountInput.value = logs.period_log.filter((entry) => entry.hit).length;
+    atCountInput.readOnly = useLog;
+    const hint = $("at-count-hint");
+    if (hint) {
+      hint.textContent = useLog
+        ? "周期メモの「AT当選」の件数を自動で入れています（直撃など周期メモに無いAT当選は、周期メモに「AT当選」として足してください）。"
+        : "戦国乙女ボーナス直撃・CZ勝利、どちらでのAT当選も合わせた回数。周期メモを使うと自動で入ります。";
+    }
+  }
+
   function refreshLogsBody() {
     if (hasPeriodLog) {
       const summarizePeriod = reference.summarizePeriodLog || reference.summarizePeriodStats;
@@ -803,6 +822,7 @@ export async function renderSettingObservationForm(
       $("period-current").textContent = `（次は${periodSummary.currentPeriod}周期目）`;
       $("period-log").innerHTML = renderPeriodSection(reference, periodSummary);
       $("period-undo-btn").style.display = logs.period_log.length ? "" : "none";
+      syncAtCountFromPeriodLog();
     }
 
     if (hasMikoLog) {

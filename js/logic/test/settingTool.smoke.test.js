@@ -904,4 +904,40 @@ await test("観測記録フォーム: 打-WINの参考データを保存し、�
   assert.match(container.querySelector("#dwin-reference").textContent, /本能寺の変突入回数（確率）：22 回 \/ 1\/97\.9/);
 });
 
+await test("観測記録フォーム: 戦国乙女5のAT当選回数は周期メモのAT当選の件数に同期し、周期メモが空なら手入力できる", async (db, container) => {
+  const shopId = await createShop(db, { name: "店S", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+
+  const atInput = container.querySelector("#f-at-count");
+  assert.equal(atInput.readOnly, false, "周期メモが無ければ手入力できる");
+
+  container.querySelector("#f-period-game").value = "100";
+  container.querySelector("#period-miss-btn").click();
+  await wait();
+  assert.equal(atInput.readOnly, true);
+  assert.equal(atInput.value, "0");
+
+  container.querySelector("#f-period-game").value = "50";
+  container.querySelector("#period-hit-btn").click();
+  await wait();
+  container.querySelector("#f-period-game").value = "120";
+  container.querySelector("#period-hit-btn").click();
+  await wait();
+  assert.equal(atInput.value, "2");
+
+  const [saved] = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(saved.at_count, 2, "同期した値が保存される");
+
+  // 取り消すと件数も戻り、全部消せば手入力に戻る
+  container.querySelector("#period-undo-btn").click();
+  await wait();
+  assert.equal(atInput.value, "1");
+  container.querySelector("#period-undo-btn").click();
+  await wait();
+  container.querySelector("#period-undo-btn").click();
+  await wait();
+  assert.equal(atInput.readOnly, false);
+});
+
 

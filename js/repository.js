@@ -572,7 +572,9 @@ function buildSettingObservationFields(form) {
       ? null
       : parseIntField(String(atGameRaw), "AT中ゲーム数", { required: false, minimum: 0 });
 
-  if (atCount !== null && atCount > gameCount) {
+  // 通常ゲーム数が0（まだ入力していない）ときは比べない。周期メモからAT当選回数が自動で入る遊技中に、
+  // 通常ゲーム数を入れる前の自動保存が失敗しないようにするため。
+  if (atCount !== null && gameCount > 0 && atCount > gameCount) {
     throw new ValidationError("AT当選回数が通常ゲーム数を超えています。");
   }
   if (czWinCount > mikoReachCount) {
