@@ -26,6 +26,20 @@ function formatPercent(value, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+/**
+ * 画面の一部を描き直す処理を実行し、スクロール位置が勝手に動いていたら元に戻す。
+ * 入力のたびに推定パネル・メモ欄を描き直すので、高さが変わった拍子に画面が最下部まで
+ * 飛ぶ現象（iPhone Safari）の対策。
+ */
+function keepScrollPosition(update) {
+  const scrollY = window.scrollY;
+  const scrollX = window.scrollX;
+  update();
+  if (Math.abs(window.scrollY - scrollY) > 1 || window.scrollX !== scrollX) {
+    window.scrollTo(scrollX, scrollY);
+  }
+}
+
 function formatRateAsFraction(value) {
   if (!value) return "-";
   return `1/${(1 / value).toFixed(1)}`;
@@ -547,8 +561,8 @@ export async function renderSettingObservationForm(
       </div>` : ""}
       ${hasPeriodLog ? `<div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
-        <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
-          <div style="flex:1;">
+        <div class="field" style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:6em;">
             <label>液晶の表示G数</label>
             <input type="number" id="f-period-game" min="0" inputmode="numeric" placeholder="例: 100">
           </div>
@@ -740,16 +754,22 @@ export async function renderSettingObservationForm(
 
   function updateEstimate() {
     const current = readForm(container, logs);
-    try {
-      const estimate = reference.buildEstimate(current);
-      estimatePanel.innerHTML = renderEstimatePanel(reference, estimate);
-    } catch (err) {
-      estimatePanel.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
-    }
+    keepScrollPosition(() => {
+      try {
+        const estimate = reference.buildEstimate(current);
+        estimatePanel.innerHTML = renderEstimatePanel(reference, estimate);
+      } catch (err) {
+        estimatePanel.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+      }
+    });
   }
 
   /** 周期メモ・巫女メモの表示を描き直し、巫女メモがあれば回数欄をメモからの集計値で上書き（読み取り専用）する。 */
   function refreshLogs() {
+    keepScrollPosition(refreshLogsBody);
+  }
+
+  function refreshLogsBody() {
     if (hasPeriodLog) {
       const summarizePeriod = reference.summarizePeriodLog || reference.summarizePeriodStats;
       const periodSummary = summarizePeriod(logs.period_log);

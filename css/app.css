@@ -303,3 +303,33 @@ table.simple td {
 .menu-popup.hidden {
   display: none;
 }
+
+/* iPhone Safariでの横ぶれ・勝手な拡大の対策。
+   ・入力欄の文字が16px未満だとフォーカス時に画面が拡大され、元に戻らず左右にぶれる。
+   ・横方向にはみ出す要素があるとページが左右に動く（flex子要素は min-width:0 が無いと縮まない）。 */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+body {
+  overflow-x: hidden;
+}
+input,
+select,
+textarea {
+  font-size: 16px;
+  max-width: 100%;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  font-size: inherit;
+}
+/* 入力のたびに描き直すパネルでは、高さが変わってもスクロール位置を勝手に動かさない */
+#estimate-panel,
+#period-log,
+#miko-log,
+#kage-log,
+#atcz-log {
+  overflow-anchor: none;
+}

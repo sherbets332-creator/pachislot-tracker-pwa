@@ -757,4 +757,36 @@ await test("観測記録フォーム: 真打 吉宗の入力・抜刀ログを�
   assert.equal(observations[0].direct_at_count, 4);
 });
 
+await test("iPhone対策: 入力欄は16px以上・横スクロール防止・再描画パネルのスクロール固定がCSSにある", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../../../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /input,\s*select,\s*textarea\s*\{[^}]*font-size:\s*16px/);
+  assert.match(css, /html\s*\{[^}]*overflow-x:\s*hidden/);
+  assert.match(css, /#estimate-panel[\s\S]*overflow-anchor:\s*none/);
+});
+
+await test("観測記録フォーム: 入力で推定パネルを描き直してもスクロール位置が動かされない", async (db, container) => {
+  const shopId = await createShop(db, { name: "店スクロール", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "L戦国乙女5 業火を穿つ宿焔の双刃" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  let scrolledTo = null;
+  let currentY = 500;
+  Object.defineProperty(window, "scrollY", { configurable: true, get: () => currentY });
+  Object.defineProperty(window, "scrollX", { configurable: true, get: () => 0 });
+  window.scrollTo = (x, y) => { scrolledTo = y; currentY = y; };
+  // 描き直しの最中にブラウザがスクロール位置を動かした状況を再現する
+  const panel = container.querySelector("#estimate-panel");
+  const descriptor = Object.getOwnPropertyDescriptor(window.Element.prototype, "innerHTML");
+  Object.defineProperty(panel, "innerHTML", {
+    configurable: true,
+    get() { return descriptor.get.call(this); },
+    set(value) { descriptor.set.call(this, value); currentY = 9999; },
+  });
+  const gameInput = container.querySelector("#f-game-count");
+  gameInput.value = "300";
+  fireEvent(gameInput, "input");
+  await wait();
+  assert.equal(scrolledTo, 500);
+});
+
 console.log(`\n${passCount} 件成功`);
