@@ -15,7 +15,8 @@
  *   （下限0）とする。マイスロの通常ゲーム数がすでに29G間を除いているかは未確認。要検証。
  * - 「チャンス目」が弱・強の合算か未確認。暫定的に画面の「チャンス目」回数（弱＋強）を入れてもらう。要検証。
  * - BIG中マングースの向きを1回のBIGで何回数えるか未確認。暫定的に見えた回数をそのまま数える。
- * - 設定2・4・5の機械割は未取得（null）。
+ * - 設定L（設定3の代わりに搭載。下パネルが常時点滅。AT初当たり・機械割は非公表）は推定の対象外。
+ *   点滅の有無はチェック項目にして、出たら推定が当てにならない旨を警告表示する。
  * - マイスロ中断データの項目名との対応は未確認。入力欄のラベルは仕様書どおりにしてある。
  * - レア小役のSC高確移行率・謎高確移行率は、内部状態の移行率で画面から数えられないため入力項目にしない。
  */
@@ -35,8 +36,8 @@ export const SC_PROBABILITY = [1 / 326.5, 1 / 321.6, null, 1 / 295.8, 1 / 287.6,
 export const CHANCE_EYE_WIN_RATE = [0.008, 0.008, null, 0.023, 0.027, 0.031];
 /** BIG中のマングースが左向きになる割合（右向き＝1−左向き）。 */
 export const MONGOOSE_LEFT_RATE = [0.6, 0.4, null, 0.4, 0.6, 0.5];
-/** 機械割。設定2・4・5は未取得。 */
-export const PAYOUT_RATE = [0.978, null, null, null, null, 1.143];
+/** 機械割（出典: 必勝本、ななプレス等。設定3は存在しない）。 */
+export const PAYOUT_RATE = [0.978, 0.987, null, 1.056, 1.086, 1.143];
 
 /** SC初当たり確率の分母から除外する、SC後のゲーム数。 */
 export const SC_EXCLUDED_GAMES = 29;
@@ -45,6 +46,12 @@ export const ENDING_STAMPS = [];
 export const PAYOUT_OVER_HINTS = [];
 
 export const SETTING_HINTS = [
+  {
+    value: "setting_l_blink",
+    group: "設定L",
+    label: "下パネルが常時点滅している（設定L）",
+    note: "設定3の代わりの特殊設定。AT初当たり・機械割は非公開のため推定には使いません。点滅していたら遊技を控えるのが基本とされています。",
+  },
   { value: "trophy_bronze", group: "サミートロフィー", label: "銅", minSetting: 2 },
   { value: "trophy_gold", group: "サミートロフィー", label: "金", minSetting: 4 },
   { value: "trophy_kirin", group: "サミートロフィー", label: "キリン柄", minSetting: 5 },
@@ -52,7 +59,8 @@ export const SETTING_HINTS = [
 ];
 
 export const SETTING_HINT_GROUP_NOTES = {
-  サミートロフィー: "初回SC終了時、リール上部液晶の右側に表示されます（銀は出現しません）。",
+  設定L: "座る前に、筐体の下パネルが常時点滅していないか確認します。",
+  サミートロフィー: "初回SC終了時、リール上部液晶の右側に表示されます（サバ連中は出ません。銀は出現しません）。",
 };
 
 export const ESTIMATE_DESCRIPTION =
@@ -140,5 +148,8 @@ export function buildEstimate(obs) {
     ],
     excludedSettings: hintSummary.excludedSettings,
     referenceHintSources: hintSummary.referenceNotes,
+    warningMessages: (obs.hint_flags || []).includes("setting_l_blink")
+      ? ["設定Lの示唆があります。この推定は設定L（数値非公開）を含まないため、当てになりません。"]
+      : [],
   };
 }

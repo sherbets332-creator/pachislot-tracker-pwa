@@ -129,4 +129,15 @@ test("buildEstimateWithHints: 内訳でも設定3が最も出やすい設定に�
   assert.deepEqual(e.nonexistentSettingIndexes, [2]);
 });
 
+test("設定Lの点滅チェック: 推定には混ぜず警告を出す。機械割の取得済みの値", () => {
+  const withL = buildEstimate({ game_count: 3000, sc_count: 9, hint_flags: ["setting_l_blink"] });
+  assert.equal(withL.hintMinSetting, null);
+  assert.match(withL.warningMessages[0], /設定L/);
+  assert.match(withL.referenceHintSources.join(""), /設定3の代わり/);
+  const without = buildEstimate({ game_count: 3000, sc_count: 9 });
+  assert.deepEqual(without.warningMessages, []);
+  assert.deepEqual(withL.likelihoods, without.likelihoods);
+  assert.deepEqual(jyuuou.PAYOUT_RATE, [0.978, 0.987, null, 1.056, 1.086, 1.143]);
+});
+
 console.log(`\n${passCount} 件成功`);

@@ -644,7 +644,7 @@ export async function renderSettingObservationForm(
           <div style="flex:1;"><span class="small">左向き</span><input type="number" id="f-mongoose-left-count" min="0" inputmode="numeric" placeholder="回数" value="${values.mongoose_left_count ?? ""}"></div>
           <div style="flex:1;"><span class="small">右向き</span><input type="number" id="f-mongoose-right-count" min="0" inputmode="numeric" placeholder="回数" value="${values.mongoose_right_count ?? ""}"></div>
         </div>
-        <div class="hint">見えた回数をそのまま数えます。設定6は左右50%なので、設定1・5（左60%）と設定2・4（左40%）の見分けに使います。</div>
+        <div class="hint">見えた回数をそのまま数えます。BIG中のラスト5Gで見える向きです。設定6は左右50%なので、設定1・5（左60%）と設定2・4（左40%）の見分けに使います。</div>
       </div>` : ""}
       ${hasPeriodLog ? `<div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
