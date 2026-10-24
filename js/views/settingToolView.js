@@ -9,6 +9,21 @@ import { commas, escapeHtml } from "../ui/format.js";
 import { buildUrl, navigate } from "../router.js";
 import { renderFlash, setFlash } from "../ui/flash.js";
 
+/**
+ * 一覧の各行に出す回数のまとめ。記録していない項目（null＝未計測、機種に無い項目）は出さない。
+ * 戦国乙女5だけは従来どおりAT・CZを常に出す。
+ */
+function summarizeObservationCounts(o, reference) {
+  const parts = [`G数${commas(o.game_count)}`];
+  const isNumber = (value) => value !== null && value !== undefined;
+  if (isNumber(o.sc_count)) parts.push(`SC ${o.sc_count}回`);
+  if (isNumber(o.at_count)) parts.push(`AT ${o.at_count}回`);
+  if (reference.MACHINE_KEY === "sengoku_otome5" || o.cz_win_count > 0 || o.miko_reach_count > 0) {
+    parts.push(`CZ ${o.cz_win_count}回`);
+  }
+  return parts.join(" ／ ");
+}
+
 export async function renderSettingTool(container, db, query) {
   const shops = await listAllShops(db);
   const allMachines = await listAllMachines(db);
@@ -64,7 +79,7 @@ export async function renderSettingTool(container, db, query) {
             <a class="list-item" href="${buildUrl(`/setting-tool/${o.id}/edit`)}" style="text-decoration:none;color:inherit;display:block;">
               <div class="fw-bold">${o.play_date}${o.machine_number ? `（台番 ${escapeHtml(o.machine_number)}）` : ""}</div>
               <div class="small muted">
-                G数${commas(o.game_count)} ／ AT ${o.at_count}回 ／ CZ ${o.cz_win_count}回
+                ${summarizeObservationCounts(o, reference)}
                 ${o.max_ending_stamp && o.max_ending_stamp !== "none" ? ` ／ 終了画面示唆あり` : ""}
               </div>
               ${headline ? `<div class="small" style="margin-top:2px;"><strong>${escapeHtml(headline)}</strong></div>` : ""}

@@ -50,9 +50,11 @@ function formatRateAsFraction(value) {
   return `1/${(1 / value).toFixed(1)}`;
 }
 
-function renderLikelihoodBars(settingLabels, likelihoods) {
+/** hiddenIndexes: 存在しない設定（獣王の設定3など）の行は出さない。 */
+function renderLikelihoodBars(settingLabels, likelihoods, hiddenIndexes = []) {
   return settingLabels
     .map((label, i) => {
+      if (hiddenIndexes.includes(i)) return "";
       const pct = (likelihoods[i] || 0) * 100;
       return `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -73,13 +75,21 @@ function renderContributions(estimate) {
   const rows = (estimate.contributions || []).map((c) => {
     const best = (estimate.settingLabels || [])[c.bestIndex] ?? "";
     const observed = c.k !== undefined ? `${c.k}/${c.n}` : "";
-    const percents = (c.likelihoods || []).map((v) => Math.round((v || 0) * 100)).join("／");
+    const hiddenIndexes = estimate.nonexistentSettingIndexes || [];
+    const percents = (c.likelihoods || [])
+      .map((v, i) => (hiddenIndexes.includes(i) ? null : Math.round((v || 0) * 100)))
+      .filter((v) => v !== null)
+      .join("／");
+    const settingNames = (estimate.settingLabels || [])
+      .filter((_, i) => !hiddenIndexes.includes(i))
+      .map((label) => label.replace("設定", ""))
+      .join("・");
     const direction = c.strength === "weak" ? "どの設定とも言えない" : `${best}寄り`;
     return `
       <div style="margin-bottom:6px;">
         <div class="small"><strong>${escapeHtml(c.label)}</strong>　${escapeHtml(observed)}（${c.observedRate >= 0.05 ? formatPercent(c.observedRate) : formatRateAsFraction(c.observedRate)}）</div>
         <div class="small">→ ${escapeHtml(direction)}　判別力：${STRENGTH_LABELS[c.strength]}</div>
-        <div class="small muted">設定1〜6：${percents}（%）</div>
+        <div class="small muted">設定${settingNames}：${percents}（%）</div>
       </div>`;
   });
   if (rows.length === 0) return "";
@@ -108,10 +118,11 @@ function renderEstimatePanel(reference, estimate) {
     : `AT初当たり実測：${estimate.observedAtRate !== null ? `${formatRateAsFraction(estimate.observedAtRate)}（${formatPercent(estimate.observedAtRate, 2)}）` : "データ無し"}
         ／
         CZ当選率実測：${estimate.observedCzRate !== null ? formatPercent(estimate.observedCzRate) : "データ無し"}`;
-  const bars = renderLikelihoodBars(estimate.settingLabels, estimate.likelihoods);
+  const hidden = estimate.nonexistentSettingIndexes || [];
+  const bars = renderLikelihoodBars(estimate.settingLabels, estimate.likelihoods, hidden);
   const confirmedNote = estimate.confirmedSetting
     ? `<div class="alert" style="margin-top:8px;">設定${estimate.confirmedSetting}濃厚の示唆があるため、上のバーは設定${estimate.confirmedSetting}に固定しています。示唆を除いた、数値だけの推定は次のとおりです。
-        ${renderLikelihoodBars(estimate.settingLabels, estimate.rawLikelihoods || [])}</div>`
+        ${renderLikelihoodBars(estimate.settingLabels, estimate.rawLikelihoods || [], hidden)}</div>`
     : "";
 
   return `
@@ -139,7 +150,7 @@ function renderEstimatePanel(reference, estimate) {
           (alternative) => `
           <div class="card" style="margin-top:10px;margin-bottom:0;">
             <div class="fw-bold" style="margin-bottom:6px;">${escapeHtml(alternative.label)}</div>
-            ${renderLikelihoodBars(alternative.settingLabels || estimate.settingLabels, alternative.likelihoods || [])}
+            ${renderLikelihoodBars(alternative.settingLabels || estimate.settingLabels, alternative.likelihoods || [], hidden)}
             ${alternative.note ? `<div class="small muted" style="margin-top:6px;">${escapeHtml(alternative.note)}</div>` : ""}
           </div>`
         )
@@ -364,6 +375,11 @@ function readForm(container, logs = null) {
     cz_count: val("f-cz-count"),
     direct_at_count: val("f-direct-at-count"),
     yagyu_count: val("f-yagyu-count"),
+    sc_count: val("f-sc-count"),
+    chance_eye_count: val("f-chance-eye-count"),
+    chance_eye_win_count: val("f-chance-eye-win-count"),
+    mongoose_left_count: val("f-mongoose-left-count"),
+    mongoose_right_count: val("f-mongoose-right-count"),
     miko_reach_count: val("f-miko-reach-count"),
     cz_win_count: val("f-cz-win-count"),
     max_ending_stamp: val("f-max-ending-stamp"),
@@ -414,7 +430,7 @@ export async function renderSettingObservationForm(
     total_game_count: observation?.total_game_count ?? "", // 空欄＝記録していない（任意項目）
     at_count:
       observation?.at_count ??
-      (reference.MACHINE_KEY === "tokyo_ghoul" || reference.MACHINE_KEY === "shinuchi_yoshimune" ? "" : 0),
+      (["tokyo_ghoul", "shinuchi_yoshimune", "jyuuou"].includes(reference.MACHINE_KEY) ? "" : 0),
     bonus_direct_count: observation?.bonus_direct_count ?? "", // 空欄＝数えていない（推定に使わない）
     bonus_count: observation?.bonus_count ?? "",
     st_count: observation?.st_count ?? "",
@@ -427,6 +443,11 @@ export async function renderSettingObservationForm(
     cz_count: observation?.cz_count ?? "",
     direct_at_count: observation?.direct_at_count ?? "",
     yagyu_count: observation?.yagyu_count ?? "",
+    sc_count: observation?.sc_count ?? "",
+    chance_eye_count: observation?.chance_eye_count ?? "",
+    chance_eye_win_count: observation?.chance_eye_win_count ?? "",
+    mongoose_left_count: observation?.mongoose_left_count ?? "",
+    mongoose_right_count: observation?.mongoose_right_count ?? "",
     miko_reach_count: observation?.miko_reach_count ?? 0,
     cz_win_count: observation?.cz_win_count ?? 0,
     max_ending_stamp: observation?.max_ending_stamp ?? "none",
@@ -463,6 +484,7 @@ export async function renderSettingObservationForm(
   const isKabaneri = reference.MACHINE_KEY === "kabaneri2_unato";
   const isTokyoGhoul = reference.MACHINE_KEY === "tokyo_ghoul";
   const isShinuchiYoshimune = reference.MACHINE_KEY === "shinuchi_yoshimune";
+  const isJyuuou = reference.MACHINE_KEY === "jyuuou";
   const supportsDwin = isOtome;
   const hasPeriodLog =
     typeof reference.summarizePeriodLog === "function" || typeof reference.summarizePeriodStats === "function";
@@ -525,7 +547,9 @@ export async function renderSettingObservationForm(
               ? "各確率の分母は未確認です。暫定的に通常ゲーム数を使います（要検証）。"
               : isShinuchiYoshimune
                 ? "マイスロ中断データの『通常プレイ数』（CZ込みではない方）。解析値の分母定義は未確認のため要検証です。"
-                : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
+                : isJyuuou
+                  ? "通常時のゲーム数。SC初当たりの分母は、ここからSC1回につき29Gを引いた値を暫定で使います（要検証）。"
+                  : "AT・ボーナス消化中を除いた、通常時のゲーム数。AT初当たり確率の分母はこちらを使います。"
         }</div>
       </div>
       <div class="field">
@@ -598,6 +622,29 @@ export async function renderSettingObservationForm(
         <label>CZで柳生だった回数（任意）</label>
         <input type="number" id="f-yagyu-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.yagyu_count ?? ""}">
         <div class="hint">マイスロ中断データの「悪人成敗チャンス 柳生」の成功数ではなく<strong>総回数</strong>を入力。CZ総回数以下にしてください。</div>
+      </div>` : isJyuuou ? `
+      <div class="field">
+        <label>SC（サバンナチャンス）初当たり回数（任意）</label>
+        <input type="number" id="f-sc-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.sc_count ?? ""}">
+        <div class="hint">マイスロ中断データの項目名との対応は未確認です。BIG・REGは含めず、サバンナチャンスの初当たりだけを数えます。</div>
+      </div>
+      <div class="field">
+        <label>チャンス目の成立回数（任意）</label>
+        <input type="number" id="f-chance-eye-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.chance_eye_count ?? ""}">
+        <div class="hint">弱・強の合算かは未確認です。画面のチャンス目の回数（弱＋強）を入れてください（要検証）。</div>
+      </div>
+      <div class="field">
+        <label>チャンス目からSC・BIG・REGに当選した回数（任意）</label>
+        <input type="number" id="f-chance-eye-win-count" min="0" inputmode="numeric" placeholder="数えていなければ空欄" value="${values.chance_eye_win_count ?? ""}">
+        <div class="hint">チャンス目の成立回数以下にしてください。</div>
+      </div>
+      <div class="field">
+        <label>BIG中のマングースの向き（任意）</label>
+        <div class="input-group">
+          <div style="flex:1;"><span class="small">左向き</span><input type="number" id="f-mongoose-left-count" min="0" inputmode="numeric" placeholder="回数" value="${values.mongoose_left_count ?? ""}"></div>
+          <div style="flex:1;"><span class="small">右向き</span><input type="number" id="f-mongoose-right-count" min="0" inputmode="numeric" placeholder="回数" value="${values.mongoose_right_count ?? ""}"></div>
+        </div>
+        <div class="hint">見えた回数をそのまま数えます。設定6は左右50%なので、設定1・5（左60%）と設定2・4（左40%）の見分けに使います。</div>
       </div>` : ""}
       ${hasPeriodLog ? `<div class="card" id="period-card">
         <h2 style="margin-top:0;">周期メモ <span class="small muted" id="period-current"></span></h2>
@@ -1172,6 +1219,11 @@ export async function renderSettingObservationForm(
     "f-cz-count",
     "f-direct-at-count",
     "f-yagyu-count",
+    "f-sc-count",
+    "f-chance-eye-count",
+    "f-chance-eye-win-count",
+    "f-mongoose-left-count",
+    "f-mongoose-right-count",
     "f-miko-reach-count",
     "f-cz-win-count",
     "f-max-ending-stamp",

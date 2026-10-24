@@ -535,7 +535,7 @@ function buildSettingObservationFields(form) {
   const gameCount = parseIntField(form.game_count, "通常ゲーム数", { required: false, minimum: 0 });
   // 東京喰種・真打 吉宗は空欄＝未計測を0回と区別する。戦国乙女5は従来どおり空欄を0回として扱う。
   const atCount =
-    form.machine_key === "tokyo_ghoul" || form.machine_key === "shinuchi_yoshimune"
+    form.machine_key === "tokyo_ghoul" || form.machine_key === "shinuchi_yoshimune" || form.machine_key === "jyuuou"
       ? parseOptionalCount(form.at_count, "AT初当たり回数")
       : parseIntField(form.at_count, "AT当選回数", { required: false, minimum: 0 });
   // 総ゲーム数（AT消化分も含む）は空欄＝「記録していない」としてnullのまま保存する（推定には使わない）。
@@ -564,6 +564,11 @@ function buildSettingObservationFields(form) {
   const czCount = parseOptionalCount(form.cz_count, "CZ総回数");
   const directAtCount = parseOptionalCount(form.direct_at_count, "直撃AT回数");
   const yagyuCount = parseOptionalCount(form.yagyu_count, "柳生回数");
+  const scCount = parseOptionalCount(form.sc_count, "SC初当たり回数");
+  const chanceEyeCount = parseOptionalCount(form.chance_eye_count, "チャンス目回数");
+  const chanceEyeWinCount = parseOptionalCount(form.chance_eye_win_count, "チャンス目直撃当選回数");
+  const mongooseLeftCount = parseOptionalCount(form.mongoose_left_count, "マングース左向き回数");
+  const mongooseRightCount = parseOptionalCount(form.mongoose_right_count, "マングース右向き回数");
 
   // AT中ゲーム数は空欄＝「手で数えていない」（画面側で総ゲーム数−通常ゲーム数の目安を使う）。
   const atGameRaw = form.at_game_count;
@@ -582,6 +587,9 @@ function buildSettingObservationFields(form) {
   }
   if (totalGameCount !== null && totalGameCount < gameCount) {
     throw new ValidationError("総ゲーム数が通常ゲーム数を下回っています。");
+  }
+  if (chanceEyeWinCount !== null && chanceEyeWinCount > (chanceEyeCount ?? 0)) {
+    throw new ValidationError("チャンス目直撃の当選回数が、チャンス目の成立回数を超えています。");
   }
   if (czCount !== null && yagyuCount !== null && yagyuCount > czCount) {
     throw new ValidationError("柳生回数がCZ総回数を超えています。");
@@ -610,6 +618,11 @@ function buildSettingObservationFields(form) {
     cz_count: czCount,
     direct_at_count: directAtCount,
     yagyu_count: yagyuCount,
+    sc_count: scCount,
+    chance_eye_count: chanceEyeCount,
+    chance_eye_win_count: chanceEyeWinCount,
+    mongoose_left_count: mongooseLeftCount,
+    mongoose_right_count: mongooseRightCount,
     max_ending_stamp: (form.max_ending_stamp ?? "none").toString(),
     max_payout_over: (form.max_payout_over ?? "none").toString(),
     ceiling_reset_hint: Boolean(form.ceiling_reset_hint),

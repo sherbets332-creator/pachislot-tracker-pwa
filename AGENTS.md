@@ -91,6 +91,11 @@ mainブランチにpushすると自動で再デプロイされる。
   ②`hintMinSetting`が6（設定6濃厚）のときだけ`likelihoods`を設定6に固定する（元の推定は`rawLikelihoods`、`confirmedSetting`）。
   「設定4以上濃厚」など範囲のある示唆は、ユーザーの了承が設定6確定のときだけだったので、バーには反映していない。
   各機種の`buildEstimate`が返す`samples`は`{key,label,k,n,rates}`を持つ契約（内訳の計算に使う）
+- 設定が5段階など「存在しない設定」がある機種（獣王は設定3なし）は、機種モジュールに`NONEXISTENT_SETTING_INDEXES`（0始まり、設定3＝[2]）を
+  持たせる。確率配列は長さ6のまま、その位置に`null`を入れる。`estimateSettingLikelihoods(samples, { excludeIndexes })`が尤度0にして
+  残りで正規化し、`buildEstimateWithHints`が内訳にも渡して`nonexistentSettingIndexes`を返す。画面のバー・内訳はその設定の行を出さない
+- 一覧（`settingToolView.js`）の回数表示は`summarizeObservationCounts`。記録していない項目（null）は出さない
+  （かつては「AT null回」と出ていた）
 - QRコード読み取り(`js/ui/qrScan.js`)は`js/vendor/jsQR.js`（Apache-2.0、vendored）を使う。250KB程度と
   重いので、アプリ起動時には読み込まず、実際にQR読み取りボタンを押した時だけ動的に`<script>`タグで
   読み込む（`ensureJsQRLoaded`）。新しい外部ライブラリを同梱する場合も`js/vendor/`に置き、

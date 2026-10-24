@@ -328,4 +328,24 @@ test("buildEstimateWithHints: 内訳が付き、6濃厚（終了画面極）で�
   assert.equal(summarizeEstimateHeadline(withStamp), "設定6以上濃厚");
 });
 
+test("estimateSettingLikelihoods: excludeIndexesの設定は尤度0で、残りの合計が1。除外なしの結果は変わらない", () => {
+  const samples = [{ k: 3, n: 1000, rates: [1 / 300, 1 / 290, null, 1 / 280, 1 / 270, 1 / 260] }];
+  const result = estimateSettingLikelihoods(samples, { excludeIndexes: [2] });
+  assert.equal(result[2], 0);
+  assert.ok(Math.abs(result.reduce((a, b) => a + b, 0) - 1) < 1e-9);
+  const normalSamples = [{ k: 3, n: 1000, rates: [1 / 400, 1 / 350, 1 / 330, 1 / 300, 1 / 280, 1 / 260] }];
+  assert.deepEqual(estimateSettingLikelihoods(normalSamples), estimateSettingLikelihoods(normalSamples, { excludeIndexes: [] }));
+  const noData = estimateSettingLikelihoods([], { excludeIndexes: [2] });
+  assert.equal(noData[2], 0);
+  assert.ok(Math.abs(noData[0] - 0.2) < 1e-9);
+});
+
+test("summarizeSampleContributions: excludeIndexesの設定は最良・最悪の判定から外れる", () => {
+  const sample = { key: "x", label: "x", k: 0, n: 500, rates: [1 / 300, 1 / 290, null, 1 / 280, 1 / 270, 1 / 260] };
+  const [c] = summarizeSampleContributions([sample], { excludeIndexes: [2] });
+  assert.notEqual(c.bestIndex, 2);
+  assert.equal(c.likelihoods[2], 0);
+  assert.ok(Number.isFinite(c.ratio));
+});
+
 console.log(`\n${passCount} 件成功`);

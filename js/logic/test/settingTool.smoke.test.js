@@ -962,4 +962,78 @@ await test("観測記録フォーム: 推定パネルに要素ごとの内訳が
   assert.match(panel, /設定6以上濃厚/);
 });
 
+await test("観測記録フォーム: 獣王の専用項目が出て、推定パネルのバー・内訳に設定3が出ない。既存機種の項目は変えない", async (db, container) => {
+  const shopId = await createShop(db, { name: "店U", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "スマスロ 獣王" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  for (const id of ["f-sc-count", "f-chance-eye-count", "f-chance-eye-win-count", "f-mongoose-left-count", "f-mongoose-right-count"]) {
+    assert.ok(container.querySelector("#" + id), id + " が無い");
+  }
+  assert.equal(container.querySelector("#f-at-count"), null);
+  assert.equal(container.querySelector("#period-card"), null);
+
+  container.querySelector("#f-game-count").value = "3000";
+  container.querySelector("#f-sc-count").value = "10";
+  fireEvent(container.querySelector("#f-sc-count"), "input");
+  await wait();
+  // 説明文（「設定3は存在しません」と書いてある）を除いた、バー・内訳の部分だけを見る
+  const panelNode = container.querySelector("#estimate-panel").cloneNode(true);
+  panelNode.querySelector("p").remove();
+  const panel = panelNode.textContent;
+  assert.ok(!panel.includes("設定3"), "設定3がバーに出ている");
+  assert.match(panel, /設定1/);
+  assert.match(panel, /設定6/);
+  assert.match(panel, /要素ごとの内訳/);
+  assert.match(panel, /設定1・2・4・5・6：/);
+});
+
+await test("観測記録フォーム: 獣王の入力を保存・再表示でき、チャンス目の超過はエラー。トロフィー虹でバーが設定6に固定される", async (db, container) => {
+  const shopId = await createShop(db, { name: "店V", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "スマスロ 獣王" });
+  await renderSettingObservationForm(container, db, { shopId, machineId });
+  container.querySelector("#f-game-count").value = "3000";
+  container.querySelector("#f-sc-count").value = "9";
+  container.querySelector("#f-chance-eye-count").value = "5";
+  container.querySelector("#f-chance-eye-win-count").value = "6";
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+  assert.match(container.textContent, /チャンス目直撃の当選回数が、チャンス目の成立回数を超えています/);
+  assert.equal((await listSettingObservations(db, { shopId, machineId })).length, 0);
+
+  container.querySelector("#f-chance-eye-win-count").value = "0";
+  container.querySelector("#f-mongoose-left-count").value = "4";
+  container.querySelector("#f-mongoose-right-count").value = "";
+  const rainbow = container.querySelector('.hint-flag[value="trophy_rainbow"]');
+  rainbow.checked = true;
+  fireEvent(rainbow, "change");
+  await wait();
+  assert.match(container.querySelector("#estimate-panel").textContent, /設定6濃厚の示唆があるため/);
+  fireEvent(container.querySelector("#observation-form"), "submit");
+  await wait();
+
+  const [saved] = await listSettingObservations(db, { shopId, machineId });
+  assert.equal(saved.sc_count, 9);
+  assert.equal(saved.chance_eye_count, 5);
+  assert.equal(saved.chance_eye_win_count, 0);
+  assert.equal(saved.mongoose_left_count, 4);
+  assert.equal(saved.mongoose_right_count, null, "空欄は未計測（null）のまま");
+  assert.equal(saved.at_count, null);
+
+  await renderSettingObservationForm(container, db, { observationId: saved.id });
+  assert.equal(container.querySelector("#f-sc-count").value, "9");
+  assert.equal(container.querySelector("#f-mongoose-right-count").value, "");
+});
+
+await test("設定判別ツール一覧: 記録していない回数（null）は「null回」と出さず、獣王はSC回数を出す", async (db, container) => {
+  const { createSettingObservation } = await import("../../repository.js");
+  const shopId = await createShop(db, { name: "店W", exchange_rate: "20", lending_rate: "20" });
+  const machineId = await createMachine(db, { name: "スマスロ 獣王" });
+  await createSettingObservation(db, { machine_key: "jyuuou", shop_id: shopId, machine_id: machineId, play_date: "2026-10-25", game_count: "3000", sc_count: "9" });
+  await renderSettingTool(container, db, new URLSearchParams(`shop_id=${shopId}&machine_id=${machineId}`));
+  const text = container.querySelector(".list-item").textContent;
+  assert.match(text, /SC 9回/);
+  assert.ok(!text.includes("null"));
+  assert.ok(!text.includes("AT "));
+});
+
 

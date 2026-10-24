@@ -24,10 +24,14 @@ function binomialLogLikelihood(k, n, p) {
  * @param {{k: number, n: number, rates: number[]}[]} samples
  *   k=成功回数, n=試行回数, rates=[設定1の確率, ..., 設定6の確率]。
  *   n が 0（まだデータが無い）のサンプルは自動的に無視される。
+ * @param {{excludeIndexes?: number[]}} [options]
+ *   excludeIndexes: 存在しない設定のインデックス（獣王の設定3＝[2]など）。尤度0にして、残りで合計1に正規化する。
  * @returns {number[]} 長さ6の配列。各設定の相対尤度（合計1）。データが無ければ均等分布を返す。
  */
-export function estimateSettingLikelihoods(samples) {
+export function estimateSettingLikelihoods(samples, { excludeIndexes = [] } = {}) {
   const settingCount = 6;
+  const excluded = new Set(excludeIndexes);
+  const existingCount = settingCount - excluded.size;
   const logLikelihoods = new Array(settingCount).fill(0);
 
   for (const sample of samples) {
@@ -38,11 +42,11 @@ export function estimateSettingLikelihoods(samples) {
   }
 
   const hasData = samples.some((s) => s && s.n > 0);
-  if (!hasData) return new Array(settingCount).fill(1 / settingCount);
+  if (!hasData) return new Array(settingCount).fill(0).map((_, i) => (excluded.has(i) ? 0 : 1 / existingCount));
 
-  // オーバーフロー防止のため最大値を引いてからexpする（softmaxと同じ考え方）。
-  const maxLog = Math.max(...logLikelihoods);
-  const weights = logLikelihoods.map((l) => Math.exp(l - maxLog));
+  // オーバーフロー防止のため最大値を引いてからexpする（softmaxと同じ考え方）。存在しない設定は最大値の計算から外す。
+  const maxLog = Math.max(...logLikelihoods.filter((_, i) => !excluded.has(i)));
+  const weights = logLikelihoods.map((l, i) => (excluded.has(i) ? 0 : Math.exp(l - maxLog)));
   const total = weights.reduce((a, b) => a + b, 0);
   return weights.map((w) => w / total);
 }
@@ -98,14 +102,15 @@ export function applyConfirmedSetting(estimate) {
  *
  * @param {{key?:string,label:string,k:number,n:number,rates:number[]}[]} samples
  */
-export function summarizeSampleContributions(samples = []) {
+export function summarizeSampleContributions(samples = [], { excludeIndexes = [] } = {}) {
   return samples
     .filter((sample) => sample && sample.n > 0 && Array.isArray(sample.rates))
     .map((sample) => {
-      const likelihoods = estimateSettingLikelihoods([sample]);
-      let bestIndex = 0;
-      let worstIndex = 0;
-      for (let i = 1; i < likelihoods.length; i += 1) {
+      const likelihoods = estimateSettingLikelihoods([sample], { excludeIndexes });
+      const existing = likelihoods.map((_, i) => i).filter((i) => !excludeIndexes.includes(i));
+      let bestIndex = existing[0];
+      let worstIndex = existing[0];
+      for (const i of existing) {
         if (likelihoods[i] > likelihoods[bestIndex]) bestIndex = i;
         if (likelihoods[i] < likelihoods[worstIndex]) worstIndex = i;
       }
@@ -131,6 +136,11 @@ export function summarizeSampleContributions(samples = []) {
  */
 export function buildEstimateWithHints(reference, observation) {
   const estimate = reference.buildEstimate(observation);
-  const withContributions = { ...estimate, contributions: summarizeSampleContributions(estimate.samples) };
+  const excludeIndexes = reference.NONEXISTENT_SETTING_INDEXES || [];
+  const withContributions = {
+    ...estimate,
+    nonexistentSettingIndexes: excludeIndexes,
+    contributions: summarizeSampleContributions(estimate.samples, { excludeIndexes }),
+  };
   return applyConfirmedSetting(withContributions);
 }
